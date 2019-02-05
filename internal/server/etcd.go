@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"cron-s/internal/job"
+	"cron-s/internal/task"
 	"errors"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/mvcc/mvccpb"
@@ -33,48 +33,48 @@ func NewEtcd(endpoints []string) (e *Etcd, err error) {
 	return
 }
 
-func (e *Etcd) Get() (jobs map[string]*job.Job, err error) {
-	jobs = make(map[string]*job.Job)
+func (e *Etcd) Get(key string) (tasks map[string]*task.Task, err error) {
+	tasks = make(map[string]*task.Task)
 
-	getResponse, err := e.Kv.Get(context.TODO(), JobsKey, clientv3.WithPrefix())
+	ctx, _ := context.WithTimeout(context.TODO(), 3*time.Second)
+	getResponse, err := e.Kv.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
 		return
 	}
 	e.WatchJobsRevision = getResponse.Header.Revision + 1
 
 	for _, v := range getResponse.Kvs {
-		j, err := job.Unmarshal(v.Value)
+		t, err := task.Unmarshal(v.Value)
 		if err != nil {
 			continue
 		}
-		jobs[string(v.Key)] = j
+		tasks[t.Name] = t
 	}
 
 	return
 }
 
-func (e *Etcd) Watch(jc chan *job.ChangeEvent) {
+func (e *Etcd) Watch(me chan *task.ModifyEvent) {
 	watchChan := e.Watcher.Watch(context.TODO(), JobsKey, clientv3.WithRev(e.WatchJobsRevision), clientv3.WithPrefix())
 
 	for w := range watchChan {
 		for _, e := range w.Events {
-			tmp := &job.ChangeEvent{
-				Key: string(e.Kv.Key),
+			tmp := &task.ModifyEvent{
+				Name: string(e.Kv.Key)[len(JobsKey):],
 			}
 
 			switch e.Type {
 			case mvccpb.PUT:
-				j, err := job.Unmarshal(e.Kv.Value)
+				t, err := task.Unmarshal(e.Kv.Value)
 				if err != nil {
 					continue
 				}
-				tmp.Job = j
-				tmp.Type = job.PUT
+				tmp.Task = t
+				tmp.Type = task.PUT
 			case mvccpb.DELETE:
-				tmp.Type = job.DEL
+				tmp.Type = task.DEL
 			}
-
-			jc <- tmp
+			me <- tmp
 		}
 	}
 }
@@ -102,9 +102,13 @@ func (e *Etcd) Lock(key string, do func()) (err error) {
 		return
 	}
 	if !txnResp.Succeeded {
-		err = errors.New("job is lock")
+		err = errors.New("task is locking")
 		return
 	}
 	do()
 	return
+}
+
+func (e *Etcd) Close() error {
+	return e.Client.Close()
 }

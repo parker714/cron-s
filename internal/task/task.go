@@ -1,4 +1,4 @@
-package job
+package task
 
 import (
 	"encoding/json"
@@ -11,8 +11,7 @@ const (
 	DEL = 1
 )
 
-// {"name":"job1","cmd":"echo hello;","cron_line":"*/5 * * * * * *"}`)
-type Job struct {
+type Task struct {
 	Name           string `json:"name"`
 	Cmd            string `json:"cmd"`
 	CronLine       string `json:"cron_line"`
@@ -20,33 +19,35 @@ type Job struct {
 	CronExpression *cronexpr.Expression
 }
 
-type ChangeEvent struct {
-	Key  string
+type ModifyEvent struct {
+	Name string
+	Task *Task
 	Type int8
-	Job  *Job
 }
 
-type CompleteEvent struct {
-	Key       string
-	Job       *Job
+type Schedule struct {
+	Name      string
+	Task      *Task
 	StartTime time.Time
 	EndTime   time.Time
 	Result    []byte
 	Err       error
 }
 
-func Unmarshal(job []byte) (*Job, error) {
-	j := &Job{}
-	err := json.Unmarshal(job, j)
+// task protocol
+// {"name":"job1","cmd":"echo hello;","cron_line":"*/5 * * * * * *"}`)
+func Unmarshal(job []byte) (*Task, error) {
+	t := &Task{}
+	err := json.Unmarshal(job, t)
 	if err != nil {
 		return nil, err
 	}
 
-	j.CronExpression, err = cronexpr.Parse(j.CronLine)
+	t.CronExpression, err = cronexpr.Parse(t.CronLine)
 	if err != nil {
 		return nil, err
 	}
-	j.NextRunTime = j.CronExpression.Next(time.Now())
+	t.NextRunTime = t.CronExpression.Next(time.Now())
 
-	return j, err
+	return t, err
 }

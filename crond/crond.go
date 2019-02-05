@@ -2,9 +2,10 @@ package crond
 
 import (
 	"context"
-	"cron-s/internal/job"
 	"cron-s/internal/lg"
 	"cron-s/internal/server"
+	"cron-s/internal/task"
+	"cron-s/internal/util"
 	"log"
 	"os"
 	"os/exec"
@@ -15,101 +16,127 @@ import (
 type Crond struct {
 	Opts *Options
 
-	Server server.Server
+	waitGroup util.WaitGroupWrapper
+	mu        sync.Mutex
 
-	jobs             map[string]*job.Job
-	jobChangeEvent   chan *job.ChangeEvent
-	jobCompleteEvent chan *job.CompleteEvent
-
-	mu sync.Mutex
+	server          server.Server
+	tasks           map[string]*task.Task
+	checkTasksAfter <-chan time.Time
+	taskModifyEvent chan *task.ModifyEvent
+	taskScheduling  chan *task.Schedule
+	taskScheduled   chan *task.Schedule
 }
 
 func New(opts *Options) *Crond {
 	opts.Logger = log.New(os.Stderr, opts.LogPrefix, log.Ldate|log.Ltime|log.Lmicroseconds)
 
 	return &Crond{
-		Opts:             opts,
-		jobs:             make(map[string]*job.Job),
-		jobChangeEvent:   make(chan *job.ChangeEvent),
-		jobCompleteEvent: make(chan *job.CompleteEvent),
+		Opts:            opts,
+		tasks:           make(map[string]*task.Task),
+		taskModifyEvent: make(chan *task.ModifyEvent),
+		taskScheduling:  make(chan *task.Schedule),
+		taskScheduled:   make(chan *task.Schedule),
+		checkTasksAfter: make(<-chan time.Time),
 	}
 }
 
 func (c *Crond) Main() {
 	var err error
-	c.logf(lg.INFO, "Cron-s Run...")
+	c.logf(lg.INFO, "Run...")
 
-	c.Server, err = server.NewEtcd(c.Opts.EtcdEndpoints)
+	c.server, err = server.NewEtcd(c.Opts.EtcdEndpoints)
 	if err != nil {
-		c.logf(lg.ERROR, "NewEtcd %s %s", c.Opts.EtcdEndpoints, err)
+		c.logf(lg.ERROR, "NewEtcd err:%s, EtcdEndpoints:%s", err, c.Opts.EtcdEndpoints)
 		return
 	}
 
-	c.jobs, err = c.Server.Get()
+	c.tasks, err = c.server.Get(server.JobsKey)
 	if err != nil {
-		c.logf(lg.ERROR, "Get Jobs %s", err)
+		c.logf(lg.ERROR, "Get %s err: %s", server.JobsKey, err)
 		return
 	}
 
-	go c.Server.Watch(c.jobChangeEvent)
-	go c.doJobEvent()
+	c.waitGroup.Wrap(func() {
+		c.server.Watch(c.taskModifyEvent)
+	})
 
-	c.scheduling()
+	c.checkTasksRunTime()
+	c.doTaskChan()
 }
 
 func (c *Crond) Exit() {
-	c.logf(lg.INFO, "Cron-s Exit...")
+	if c.server != nil {
+		c.server.Close()
+	}
+
+	c.waitGroup.Wait()
+	c.logf(lg.INFO, "Exit...")
 }
 
-func (c *Crond) doJobEvent() {
+func (c *Crond) doTaskChan() {
 	for {
 		select {
-		case j := <-c.jobChangeEvent:
+		case <-c.checkTasksAfter:
+			c.logf(lg.INFO, "checkTasksRunTime")
+
+			c.waitGroup.Wrap(func() {
+				c.checkTasksRunTime()
+			})
+		case t := <-c.taskModifyEvent:
+			c.logf(lg.INFO, "Task modify: %s, type: %d", t.Name, t.Type)
+
 			c.mu.Lock()
-			switch j.Type {
-			case job.PUT:
-				c.jobs[j.Key] = j.Job
-			case job.DEL:
-				if _, ok := c.jobs[j.Key]; ok {
-					delete(c.jobs, j.Key)
+			switch t.Type {
+			case task.PUT:
+				c.tasks[t.Name] = t.Task
+			case task.DEL:
+				if _, ok := c.tasks[t.Name]; ok {
+					delete(c.tasks, t.Name)
 				}
 			}
 			c.mu.Unlock()
-		case j := <-c.jobCompleteEvent:
-			c.logf(lg.INFO, "job complete %v", j)
+
+			c.checkTasksRunTime()
+		case t := <-c.taskScheduling:
+			c.logf(lg.INFO, "Task scheduling:%s", t.Name)
+
+			c.waitGroup.Wrap(func() {
+				t.StartTime = time.Now()
+
+				t.Err = c.server.Lock(t.Name, func() {
+					cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", t.Task.Cmd)
+					t.Result, t.Err = cmd.CombinedOutput()
+				})
+
+				t.EndTime = time.Now()
+				c.taskScheduled <- t
+			})
+		case t := <-c.taskScheduled:
+			c.logf(lg.INFO, "Task scheduled:%s, result:%s, err:%v", t.Name, t.Result, t.Err)
 		}
 	}
 }
 
-func (c *Crond) scheduling() {
-	for {
-		now := time.Now()
-		c.mu.Lock()
-		for key, j := range c.jobs {
-			if j.NextRunTime.Before(now) || j.NextRunTime.Equal(now) {
-				jce := &job.CompleteEvent{
-					Key:       key,
-					Job:       j,
-					StartTime: now,
-				}
+func (c *Crond) checkTasksRunTime() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-				go func() {
-					err := c.Server.Lock(key, func() {
-						cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", j.Cmd)
-						jce.Result, jce.Err = cmd.CombinedOutput()
-						jce.EndTime = time.Now()
-
-						c.jobCompleteEvent <- jce
-					})
-
-					if err != nil {
-						c.logf(lg.ERROR, "scheduling %s %s", key, err)
-					}
-				}()
-
-				j.NextRunTime = j.CronExpression.Next(now)
+	now := time.Now()
+	after := 24 * 60 * 60 * time.Second
+	for _, t := range c.tasks {
+		if t.NextRunTime.Before(now) || t.NextRunTime.Equal(now) {
+			ts := &task.Schedule{
+				Name: t.Name,
+				Task: t,
 			}
+			c.taskScheduling <- ts
+			t.NextRunTime = t.CronExpression.Next(now)
 		}
-		c.mu.Unlock()
+
+		if t.NextRunTime.Sub(now) < after {
+			after = t.NextRunTime.Sub(now)
+		}
 	}
+
+	c.checkTasksAfter = time.After(after)
 }
