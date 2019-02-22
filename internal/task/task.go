@@ -12,11 +12,11 @@ const (
 )
 
 type Task struct {
-	Name           string `json:"name"`
-	Cmd            string `json:"cmd"`
-	CronLine       string `json:"cron_line"`
-	NextRunTime    time.Time
-	CronExpression *cronexpr.Expression
+	Name           string               `json:"name"`
+	Cmd            string               `json:"cmd"`
+	CronLine       string               `json:"cron_line"`
+	NextRunTime    time.Time            `json:"-"`
+	CronExpression *cronexpr.Expression `json:"-"`
 }
 
 type ModifyEvent struct {
@@ -50,4 +50,12 @@ func Unmarshal(job []byte) (*Task, error) {
 	t.NextRunTime = t.CronExpression.Next(time.Now())
 
 	return t, err
+}
+
+func Marshal(task *Task) (string, error) {
+	bytes, err := json.Marshal(task)
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), err
 }

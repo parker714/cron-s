@@ -33,6 +33,25 @@ func NewEtcd(endpoints []string) (e *Etcd, err error) {
 	return
 }
 
+func (e *Etcd) Add(t *task.Task) error {
+	ts, err := task.Marshal(t)
+	if err != nil {
+		return err
+	}
+
+	ctx, _ := context.WithTimeout(context.TODO(), 3*time.Second)
+	_, err = e.Kv.Put(ctx, JobsKey+t.Name, ts)
+
+	return err
+}
+
+func (e *Etcd) Del(t *task.Task) error {
+	ctx, _ := context.WithTimeout(context.TODO(), 3*time.Second)
+	_, err := e.Kv.Delete(ctx, JobsKey+t.Name)
+
+	return err
+}
+
 func (e *Etcd) Get(key string) (tasks map[string]*task.Task, err error) {
 	tasks = make(map[string]*task.Task)
 

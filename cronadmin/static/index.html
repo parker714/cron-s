@@ -3,26 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <!-- import CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <link href="https://cdn.bootcss.com/element-ui/2.5.4/theme-chalk/index.css" rel="stylesheet">
+    <style>
+        ul {
+            margin: 0;
+            padding: 3px 0 0 0;
+            display: flex;
+            list-style: none;
+        }
+        ul > li {
+            padding: 2px 10px;
+            margin-left: 20px;
+            color: #ffffff;
+            font-weight: bold;
+        }
+        .active{
+            border-radius: 4px;
+            background-color: #5a1434;
+        }
+
+        .pb-btn{
+            background-color: #5a1434;
+            border-color: #5a1434;
+        }
+        .pb-btn:focus,
+        .pb-btn:hover{
+            background-color: #5a1434;
+            border-color: #5a1434;
+        }
+    </style>
 </head>
 <body>
 <div id="app">
-    <el-button @click="visible = true">2019</el-button>
-    <el-dialog :visible.sync="visible" title="2019 up">
-        <p>新年快乐，祝你快乐</p>
-    </el-dialog>
+    <el-container>
+        <el-header style="background-color: #9e2159">
+            <div style="display: flex;margin-top: 15px;">
+                <div>
+                    <embed src="cat.svg" style="width: 30px;height: 30px;" />
+                </div>
+                <div>
+                    <nav>
+                        <ul>
+                            <li v-for="menu in menus" @click="changeMenu(menu)" :class="{active: menu.active}">{{menu.name}}</li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </el-header>
+        <el-main>
+            <div>
+                <el-button class="pb-btn" type="primary" size="small" @click="dialogFormVisible = true">Add</el-button>
+            </div>
+
+            <el-dialog title="Task" :visible.sync="dialogFormVisible">
+                <el-form :model="formTask">
+                    <el-form-item label="name" :label-width="formLabelWidth">
+                        <el-input v-model="formTask.name" autocomplete="off"></el-input>
+                    </el-form-item>
+                    <el-form-item label="cmd" :label-width="formLabelWidth">
+                        <el-input v-model="formTask.cmd" autocomplete="off"></el-input>
+                    </el-form-item>
+                    <el-form-item label="cron_line" :label-width="formLabelWidth">
+                        <el-input v-model="formTask.cron_line" autocomplete="off"></el-input>
+                    </el-form-item>
+                </el-form>
+                <div slot="footer" class="dialog-footer">
+                    <el-button @click="dialogFormVisible = false">cancel</el-button>
+                    <el-button class="pb-btn" type="primary" @click="addTask">submit</el-button>
+                </div>
+            </el-dialog>
+
+            <hr>
+
+            <el-table
+                    v-loading="loading"
+                    :data="tableData"
+                    style="width: 100%">
+                <el-table-column
+                        prop="name"
+                        label="name"
+                        width="180">
+                </el-table-column>
+                <el-table-column
+                        prop="cmd"
+                        label="cmd"
+                        width="180">
+                </el-table-column>
+                <el-table-column
+                        prop="cron_line"
+                        label="cron_line">
+                </el-table-column>
+                <el-table-column
+                        label="op"
+                        width="100">
+                    <template slot-scope="scope">
+                        <el-button type="text" size="small" @click="delTask(scope.row)">del</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-main>
+    </el-container>
 </div>
 </body>
 <!-- import Vue before Element -->
-<script src="https://unpkg.com/vue/dist/vue.js"></script>
+<script src="https://cdn.bootcss.com/vue/2.6.6/vue.min.js"></script>
+<script src="https://cdn.bootcss.com/axios/0.18.0/axios.min.js"></script>
 <!-- import JavaScript -->
-<script src="https://unpkg.com/element-ui/lib/index.js"></script>
-<script>
-    new Vue({
-        el: '#app',
-        data: function() {
-            return { visible: false }
-        }
-    })
-</script>
+<script src="https://cdn.bootcss.com/element-ui/2.5.4/index.js"></script>
+<script src="/index.js"></script>
 </html>
