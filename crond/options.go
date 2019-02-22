@@ -2,14 +2,11 @@ package crond
 
 import (
 	"cron-s/internal/lg"
-	"log"
 	"time"
 )
 
 type Options struct {
-	Logger    *log.Logger
-	LogLevel  lg.LogLevel
-	LogPrefix string
+	LogLevel lg.LogLevel
 
 	EtcdEndpoints   []string
 	EtcdDialTimeout time.Duration
@@ -17,8 +14,7 @@ type Options struct {
 
 func NewOptions() *Options {
 	return &Options{
-		LogLevel:  lg.INFO,
-		LogPrefix: "[crond]",
+		LogLevel: lg.INFO,
 
 		EtcdEndpoints:   []string{"127.0.0.1:2379"},
 		EtcdDialTimeout: 3 * time.Second,

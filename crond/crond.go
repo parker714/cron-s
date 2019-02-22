@@ -6,8 +6,6 @@ import (
 	"cron-s/internal/server"
 	"cron-s/internal/task"
 	"cron-s/internal/util"
-	"log"
-	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -15,6 +13,8 @@ import (
 
 type Crond struct {
 	Opts *Options
+
+	lg *lg.Lg
 
 	waitGroup util.WaitGroupWrapper
 	mu        sync.Mutex
@@ -28,9 +28,7 @@ type Crond struct {
 }
 
 func New(opts *Options) *Crond {
-	opts.Logger = log.New(os.Stderr, opts.LogPrefix, log.Ldate|log.Ltime|log.Lmicroseconds)
-
-	return &Crond{
+	c := &Crond{
 		Opts:            opts,
 		tasks:           make(map[string]*task.Task),
 		taskModifyEvent: make(chan *task.ModifyEvent),
@@ -38,21 +36,25 @@ func New(opts *Options) *Crond {
 		taskScheduled:   make(chan *task.Schedule),
 		checkTasksAfter: make(<-chan time.Time),
 	}
+
+	c.lg = lg.New("[crond]", opts.LogLevel)
+
+	return c
 }
 
 func (c *Crond) Main() {
 	var err error
-	c.logf(lg.INFO, "Run...")
+	c.lg.Logf(lg.INFO, "Crond Run...")
 
 	c.server, err = server.NewEtcd(c.Opts.EtcdEndpoints)
 	if err != nil {
-		c.logf(lg.ERROR, "NewEtcd err:%s, EtcdEndpoints:%s", err, c.Opts.EtcdEndpoints)
+		c.lg.Logf(lg.ERROR, "NewEtcd err:%s, EtcdEndpoints:%s", err, c.Opts.EtcdEndpoints)
 		return
 	}
 
 	c.tasks, err = c.server.Get(server.JobsKey)
 	if err != nil {
-		c.logf(lg.ERROR, "Get %s err: %s", server.JobsKey, err)
+		c.lg.Logf(lg.ERROR, "Get %s err: %s", server.JobsKey, err)
 		return
 	}
 
@@ -70,20 +72,20 @@ func (c *Crond) Exit() {
 	}
 
 	c.waitGroup.Wait()
-	c.logf(lg.INFO, "Exit...")
+	c.lg.Logf(lg.INFO, "Exit...")
 }
 
 func (c *Crond) doTaskChan() {
 	for {
 		select {
 		case <-c.checkTasksAfter:
-			c.logf(lg.INFO, "checkTasksRunTime")
+			c.lg.Logf(lg.INFO, "checkTasksRunTime")
 
 			c.waitGroup.Wrap(func() {
 				c.checkTasksRunTime()
 			})
 		case t := <-c.taskModifyEvent:
-			c.logf(lg.INFO, "Task modify: %s, type: %d", t.Name, t.Type)
+			c.lg.Logf(lg.INFO, "Task modify: %s, type: %d", t.Name, t.Type)
 
 			c.mu.Lock()
 			switch t.Type {
@@ -98,7 +100,7 @@ func (c *Crond) doTaskChan() {
 
 			c.checkTasksRunTime()
 		case t := <-c.taskScheduling:
-			c.logf(lg.INFO, "Task scheduling:%s", t.Name)
+			c.lg.Logf(lg.INFO, "Task scheduling:%s", t.Name)
 
 			c.waitGroup.Wrap(func() {
 				t.StartTime = time.Now()
@@ -112,7 +114,7 @@ func (c *Crond) doTaskChan() {
 				c.taskScheduled <- t
 			})
 		case t := <-c.taskScheduled:
-			c.logf(lg.INFO, "Task scheduled:%s, result:%s, err:%v", t.Name, t.Result, t.Err)
+			c.lg.Logf(lg.INFO, "Task scheduled:%s, result:%s, err:%v", t.Name, t.Result, t.Err)
 		}
 	}
 }
