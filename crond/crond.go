@@ -1,144 +1,99 @@
 package crond
 
 import (
+	"container/heap"
 	"context"
-	"cron-s/internal/lg"
-	"cron-s/internal/server"
-	"cron-s/internal/task"
 	"cron-s/internal/util"
+	"log"
+	"net/http"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
 )
 
 type Crond struct {
-	Opts *Options
-
-	lg *lg.Lg
-
 	waitGroup util.WaitGroupWrapper
-	mu        sync.Mutex
 
-	server          server.Server
-	tasks           map[string]*task.Task
-	checkTasksAfter <-chan time.Time
-	taskModifyEvent chan *task.ModifyEvent
-	taskScheduling  chan *task.Schedule
-	taskScheduled   chan *task.Schedule
+	opts     *options
+	log      *log.Logger
+	mu       sync.Mutex
+	taskHeap *taskHeap
+
+	scheduleTaskTick <-chan time.Time
+	waitExecTask     chan *task
+	waitStoreTask    chan *store
+
+	httpServer *http.Server
 }
 
-func New(opts *Options) *Crond {
-	c := &Crond{
-		Opts:            opts,
-		tasks:           make(map[string]*task.Task),
-		taskModifyEvent: make(chan *task.ModifyEvent),
-		taskScheduling:  make(chan *task.Schedule),
-		taskScheduled:   make(chan *task.Schedule),
-		checkTasksAfter: make(<-chan time.Time),
+func New(opts *options) *Crond {
+	return &Crond{
+		opts:             opts,
+		log:              log.New(os.Stdout, "", log.LstdFlags),
+		taskHeap:         &taskHeap{},
+		scheduleTaskTick: time.Tick(opts.defaultScheduleTime),
+		waitExecTask:     make(chan *task, 100),
+		waitStoreTask:    make(chan *store, 100),
 	}
-
-	c.lg = lg.New("[crond]", opts.LogLevel)
-
-	return c
 }
 
-func (c *Crond) Main() {
-	var err error
-	c.lg.Logf(lg.INFO, "Crond Run...")
-
-	c.server, err = server.NewEtcd(c.Opts.EtcdEndpoints)
-	if err != nil {
-		c.lg.Logf(lg.ERROR, "NewEtcd err:%s, EtcdEndpoints:%s", err, c.Opts.EtcdEndpoints)
-		return
-	}
-
-	c.tasks, err = c.server.Get(server.JobsKey)
-	if err != nil {
-		c.lg.Logf(lg.ERROR, "Get %s err: %s", server.JobsKey, err)
-		return
-	}
+func (c *Crond) Run() {
+	c.log.Println("Crond Run")
 
 	c.waitGroup.Wrap(func() {
-		c.server.Watch(c.taskModifyEvent)
+		for {
+			select {
+			case <-c.scheduleTaskTick:
+				//c.scheduleTask()
+			case task := <-c.waitExecTask:
+				c.log.Println("[INFO] start Exec Task", task.Name)
+
+				c.waitGroup.Wrap(func() {
+					store := NewStore()
+					store.task = task
+					store.startTime = time.Now()
+
+					cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", store.task.Cmd)
+					store.result, store.err = cmd.CombinedOutput()
+
+					store.endTime = time.Now()
+					c.waitStoreTask <- store
+				})
+			case store := <-c.waitStoreTask:
+				c.log.Printf("[INFO] start Store Task, Name %s, Result %s", store.task.Name, store.result)
+			}
+		}
 	})
 
-	c.checkTasksRunTime()
-	c.doTaskChan()
+	c.initHttpServer()
+	if err := c.httpServer.ListenAndServe(); err != nil {
+		c.log.Println("listen http err", err)
+	}
 }
 
 func (c *Crond) Exit() {
-	if c.server != nil {
-		c.server.Close()
-	}
-
 	c.waitGroup.Wait()
-	c.lg.Logf(lg.INFO, "Exit...")
+	c.log.Println("Crond Exit")
 }
 
-func (c *Crond) doTaskChan() {
+func (c *Crond) scheduleTask() {
 	for {
-		select {
-		case <-c.checkTasksAfter:
-			c.lg.Logf(lg.INFO, "checkTasksRunTime")
-
-			c.waitGroup.Wrap(func() {
-				c.checkTasksRunTime()
-			})
-		case t := <-c.taskModifyEvent:
-			c.lg.Logf(lg.INFO, "Task modify: %s, type: %d", t.Name, t.Type)
-
-			c.mu.Lock()
-			switch t.Type {
-			case task.PUT:
-				c.tasks[t.Name] = t.Task
-			case task.DEL:
-				if _, ok := c.tasks[t.Name]; ok {
-					delete(c.tasks, t.Name)
-				}
-			}
-			c.mu.Unlock()
-
-			c.checkTasksRunTime()
-		case t := <-c.taskScheduling:
-			c.lg.Logf(lg.INFO, "Task scheduling:%s", t.Name)
-
-			c.waitGroup.Wrap(func() {
-				t.StartTime = time.Now()
-
-				t.Err = c.server.Lock(t.Name, func() {
-					cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", t.Task.Cmd)
-					t.Result, t.Err = cmd.CombinedOutput()
-				})
-
-				t.EndTime = time.Now()
-				c.taskScheduled <- t
-			})
-		case t := <-c.taskScheduled:
-			c.lg.Logf(lg.INFO, "Task scheduled:%s, result:%s, err:%v", t.Name, t.Result, t.Err)
-		}
-	}
-}
-
-func (c *Crond) checkTasksRunTime() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	after := 24 * 60 * 60 * time.Second
-	for _, t := range c.tasks {
-		if t.NextRunTime.Before(now) || t.NextRunTime.Equal(now) {
-			ts := &task.Schedule{
-				Name: t.Name,
-				Task: t,
-			}
-			c.taskScheduling <- ts
-			t.NextRunTime = t.CronExpression.Next(now)
+		if c.taskHeap.Len() < 1 {
+			return
 		}
 
-		if t.NextRunTime.Sub(now) < after {
-			after = t.NextRunTime.Sub(now)
+		now := time.Now()
+		if (*c.taskHeap)[0].runTime.Before(now) || (*c.taskHeap)[0].runTime.Equal(now) {
+			c.waitExecTask <- (*c.taskHeap)[0]
+			(*c.taskHeap)[0].runTime = (*c.taskHeap)[0].cronExpression.Next(now)
+			heap.Fix(c.taskHeap, 0)
 		}
 	}
 
-	c.checkTasksAfter = time.After(after)
+	//tick := (*c.taskHeap)[0].runTime.Sub(now)
+	//if tick < 0 {
+	//	tick = c.opts.defaultScheduleTime
+	//}
+	//c.scheduleTaskTick = time.Tick(tick)
 }

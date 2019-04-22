@@ -25,8 +25,7 @@ func (p *program) Init(env svc.Environment) error {
 func (p *program) Start() error {
 	opts := crond.NewOptions()
 	p.crond = crond.New(opts)
-	p.crond.Main()
-
+	p.crond.Run()
 	return nil
 }
 
