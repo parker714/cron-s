@@ -3,7 +3,6 @@ package main
 import (
 	"cron-s/crond"
 	"github.com/judwhite/go-svc/svc"
-	"log"
 	"syscall"
 )
 
@@ -14,7 +13,7 @@ type program struct {
 func main() {
 	prg := &program{}
 	if err := svc.Run(prg, syscall.SIGINT, syscall.SIGTERM); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 

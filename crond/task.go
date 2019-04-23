@@ -15,7 +15,7 @@ type task struct {
 }
 
 // task protocol
-// {"name":"task1","cmd":"echo hello;","cron_line":"*/5 * * * * * *"}`)
+// {"name":"task1","cmd":"echo hello;","cron_line":"*/5 * * * * * *"}`
 func Unmarshal(tb []byte) (*task, error) {
 	t := &task{}
 	err := json.Unmarshal(tb, t)
