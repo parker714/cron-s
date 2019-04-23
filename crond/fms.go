@@ -2,69 +2,48 @@ package crond
 
 import (
 	"container/heap"
+	"cron-s/task"
 	"encoding/json"
-	"fmt"
-	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
 	"io"
-	"time"
 )
 
-type fms struct {
-	ctx Context
+type Fms struct {
+	ctx *Context
 }
 
-func (f *fms) Apply(l *raft.Log) interface{} {
-	fmt.Println("fms Apply", l)
+func (f *Fms) Apply(l *raft.Log) interface{} {
+	f.ctx.Crond.Log.Println("[DEBUG] fms: Apply")
 
-	te := &taskEvent{}
-	if err := json.Unmarshal(l.Data, &te); err != nil {
-		f.ctx.crond.log.Println("[WARN] Apply task event err")
+	te := &task.Event{}
+	if err := json.Unmarshal(l.Data, te); err != nil {
+		f.ctx.Crond.Log.Println("[WARN] fms: Apply Unmarshal err", err)
 		return nil
 	}
 
-	// todo ??
-	switch te.Cmd {
-	case TASK_ADD:
-		var err error
-		te.Task.cronExpression, err = cronexpr.Parse(te.Task.CronLine)
-		if err != nil {
-			f.ctx.crond.log.Println("[WARN] Apply task event Parse err", err)
-			return nil
-		}
-		te.Task.runTime = te.Task.cronExpression.Next(time.Now())
-
-		heap.Push(f.ctx.crond.taskHeap, te.Task)
-	case TASK_DEL:
-		for i, task := range *f.ctx.crond.taskHeap {
-			if te.Task.Name == task.Name {
-				heap.Remove(f.ctx.crond.taskHeap, i)
-			}
-		}
+	if err := f.ctx.Crond.HandleTaskEvent(te); err != nil {
+		f.ctx.Crond.Log.Println("[WARN] fms: Apply HandleTaskEvent err", err)
+		return nil
 	}
+
 	return nil
 }
 
-func (f *fms) Snapshot() (raft.FSMSnapshot, error) {
-	fmt.Println("fms Snapshot")
+func (f *Fms) Snapshot() (raft.FSMSnapshot, error) {
+	f.ctx.Crond.Log.Println("[DEBUG] fms: Snapshot")
 
-	return &fmsSnapshot{
-		ctx: Context{crond: f.ctx.crond},
+	return &FmsSnapshot{
+		ctx: &Context{Crond: f.ctx.Crond},
 	}, nil
 }
 
-func (f *fms) Restore(serialized io.ReadCloser) error {
-	fmt.Println("fms Restore")
+func (f *Fms) Restore(serialized io.ReadCloser) error {
+	f.ctx.Crond.Log.Println("[DEBUG] fpm: Restore")
 
-	th := &taskHeap{}
-	if err := json.NewDecoder(serialized).Decode(th); err != nil {
+	if err := json.NewDecoder(serialized).Decode(f.ctx.Crond.TaskHeap); err != nil {
 		return err
 	}
-
-	// todo ??
-	for _, t := range *th {
-		f.ctx.crond.taskHeap.Push(t)
-	}
+	heap.Init(f.ctx.Crond.TaskHeap)
 
 	return nil
 }

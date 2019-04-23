@@ -1,8 +1,9 @@
 package crond
 
 import (
+	"cron-s/task"
 	"encoding/json"
-	"fmt"
+	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
 	"io/ioutil"
 	"net/http"
@@ -12,8 +13,8 @@ import (
 func (c *Crond) initHttpServer() {
 	mux := http.NewServeMux()
 
-	//handleStatic := http.FileServer(http.Dir("../../cronadmin/static"))
-	//mux.Handle("/", http.StripPrefix("/", handleStatic))
+	handleStatic := http.FileServer(http.Dir("static"))
+	mux.Handle("/", http.StripPrefix("/", handleStatic))
 
 	mux.HandleFunc("/api/tasks", c.handleTasks)
 	mux.HandleFunc("/api/task/save", c.handleTaskSave)
@@ -27,26 +28,30 @@ func (c *Crond) initHttpServer() {
 }
 
 func (c *Crond) handleTasks(w http.ResponseWriter, r *http.Request) {
-	// TODO
-	c.mu.Lock()
-	c.httpResponse(c.taskHeap, w)
-	c.mu.Unlock()
+	c.httpResponse(c.getTasks(), w)
 }
 
 func (c *Crond) handleTaskSave(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		c.log.Println("[WARN] http.handleTaskSave ReadAll err", err)
+		c.Log.Println("[WARN] crond: http.handleTaskSave ReadAll err", err)
 		return
 	}
 
-	t, err := Unmarshal(body)
+	t := &task.Task{}
+	err = json.Unmarshal(body, t)
 	if err != nil {
-		c.log.Println("[WARN] http.handleTaskSave Unmarshal err", err)
+		c.Log.Println("[WARN] crond: http.handleTaskSave Unmarshal err", err)
 		return
 	}
+	t.CronExpression, err = cronexpr.Parse(t.CronLine)
+	if err != nil {
+		c.Log.Println("[WARN] crond: http.handleTaskSave Parse err", err)
+		return
+	}
+	t.RunTime = t.CronExpression.Next(time.Now())
 
-	c.taskEvent <- NewTaskEvent(t, TASK_ADD)
+	c.taskEvent <- task.NewEvent(t, task.ADD)
 	c.scheduleTask()
 
 	c.httpResponse("ok", w)
@@ -54,16 +59,19 @@ func (c *Crond) handleTaskSave(w http.ResponseWriter, r *http.Request) {
 func (c *Crond) handleTaskDel(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		c.Log.Println("[WARN] crond: http.handleTaskSave ReadAll err", err)
 		return
 	}
 
-	t := &task{}
+	t := &task.Task{}
 	err = json.Unmarshal(body, t)
 	if err != nil {
+		c.Log.Println("[WARN] crond: http.handleTaskSave ReadAll err", err)
 		return
 	}
 
-	c.taskEvent <- NewTaskEvent(t, TASK_DEL)
+	c.taskEvent <- task.NewEvent(t, task.DEL)
+
 	c.httpResponse("ok", w)
 }
 
@@ -73,7 +81,8 @@ func (c *Crond) handleJoin(w http.ResponseWriter, r *http.Request) {
 
 	index := c.raft.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(peerAddress), 0, 3*time.Second)
 	if err := index.Error(); err != nil {
-		fmt.Println(err)
+		c.Log.Println("[WARN] crond: http.handleJoin err", err)
+		return
 	}
 
 	c.httpResponse("ok", w)
@@ -82,11 +91,12 @@ func (c *Crond) handleJoin(w http.ResponseWriter, r *http.Request) {
 func (c *Crond) httpResponse(v interface{}, w http.ResponseWriter) {
 	resp, err := json.Marshal(v)
 	if err != nil {
-		c.log.Println("[WARN] http.httpResponse, json marshal err", err)
+		c.Log.Println("[WARN] crond: http.httpResponse, Marshal err", err)
 		return
 	}
 
 	if _, err := w.Write(resp); err != nil {
-		c.log.Println("[WARN] http.httpResponse, write err ", err)
+		c.Log.Println("[WARN] crond: http.httpResponse, Write err ", err)
+		return
 	}
 }

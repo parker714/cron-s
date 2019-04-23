@@ -9,15 +9,11 @@ import (
 	"time"
 )
 
-func (c *Crond)newRaft(opts *options) (*raft.Raft, error) {
+func (c *Crond) newRaft(opts *options) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
 	rc.LocalID = raft.ServerID(opts.nodeId)
 
-	// todo: test
-	rc.SnapshotInterval = 20 * time.Second
-	rc.SnapshotThreshold = 1
-
-	logStore, err := raftBoltdb.NewBoltStore(filepath.Join(opts.dataDir, "raft-log.bolt"))
+	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(opts.dataDir, "raft-Log.bolt"))
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +37,11 @@ func (c *Crond)newRaft(opts *options) (*raft.Raft, error) {
 		return nil, err
 	}
 
-	fsm := &fms{
-		ctx:Context{crond:c},
+	fsm := &Fms{
+		ctx: &Context{Crond: c},
 	}
 
-	r, err := raft.NewRaft(rc, fsm, logStore, stableStore, snaps, transport)
+	r, err := raft.NewRaft(rc, fsm, LogStore, stableStore, snaps, transport)
 	if err != nil {
 		return nil, err
 	}

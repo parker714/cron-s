@@ -4,8 +4,11 @@ import (
 	"container/heap"
 	"context"
 	"cron-s/internal/util"
+	"cron-s/store"
+	"cron-s/task"
 	"encoding/json"
 	"fmt"
+	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
 	"log"
 	"net/http"
@@ -19,15 +22,15 @@ type Crond struct {
 	waitGroup util.WaitGroupWrapper
 
 	opts     *options
-	log      *log.Logger
+	Log      *log.Logger
 	mu       sync.Mutex
-	taskHeap *taskHeap
+	TaskHeap *task.Heap
 
 	scheduleTaskTick <-chan time.Time
-	waitExecTask     chan *task
-	waitStoreTask    chan *store
+	waitExecTask     chan *task.Task
+	waitStoreTask    chan *store.Store
 
-	taskEvent chan *taskEvent
+	taskEvent chan *task.Event
 
 	httpServer *http.Server
 
@@ -37,57 +40,53 @@ type Crond struct {
 func New(opts *options) *Crond {
 	return &Crond{
 		opts:             opts,
-		log:              log.New(os.Stdout, "", log.LstdFlags),
-		taskHeap:         &taskHeap{},
+		Log:              log.New(os.Stdout, "", log.LstdFlags),
+		TaskHeap:         task.NewHeap(),
 		scheduleTaskTick: time.Tick(opts.defaultScheduleTaskTick),
-		waitExecTask:     make(chan *task, 100),
-		waitStoreTask:    make(chan *store, 100),
-		taskEvent:        make(chan *taskEvent, 100),
+		waitExecTask:     make(chan *task.Task, 100),
+		waitStoreTask:    make(chan *store.Store, 100),
+		taskEvent:        make(chan *task.Event, 100),
 	}
 }
 
 func (c *Crond) Run() {
-	var err error
-	c.log.Println("[INFO] crond Run")
+	c.Log.Println("[DEBUG] crond: Run")
 
 	c.waitGroup.Wrap(func() {
 		for {
 			select {
+			case <-c.scheduleTaskTick:
+				c.scheduleTask()
 			case te := <-c.taskEvent:
-				c.log.Println("[INFO] task event")
+				c.Log.Println("[DEBUG] crond: task event")
 
 				tes, err := json.Marshal(te)
 				if err != nil {
-					fmt.Println("task event failed", err)
+					c.Log.Println("[WARN] crond: task event Marshal err", err)
 					return
 				}
-
-				af := c.raft.Apply(tes, 0)
+				af := c.raft.Apply(tes, 3*time.Second)
 				if err := af.Error(); err != nil {
-					fmt.Println("Apply failed", err)
+					c.Log.Println("[WARN] crond: task event Apply err", err)
 					return
 				}
-
-				//c.handleTask(te)
-			case <-c.scheduleTaskTick:
-
-				c.scheduleTask()
-			case task := <-c.waitExecTask:
-				c.log.Println("[INFO] start Exec Task", task.Name)
+			case t := <-c.waitExecTask:
+				c.Log.Println("[DEBUG] crond: exec Task")
 
 				c.waitGroup.Wrap(func() {
-					c.execTask(task)
+					c.execTask(t)
 				})
-			case store := <-c.waitStoreTask:
-				c.log.Printf("[INFO] start Store Task, Name %s, Result %s", store.task.Name, store.result)
+			case st := <-c.waitStoreTask:
+				c.Log.Printf("[DEBUG] crond: start Store Task, Name %s, Result %s\n", st.Task.Name, st.Result)
 			}
 		}
 	})
 
 	c.waitGroup.Wrap(func() {
+		var err error
 		c.raft, err = c.newRaft(c.opts)
 		if err != nil {
-			c.log.Println("[WARN] newRaft", err)
+			c.Log.Println("[WARN] crond: newRaft err", err)
 		}
 	})
 
@@ -95,79 +94,87 @@ func (c *Crond) Run() {
 		if c.opts.join != "" {
 			err := c.joinCluster(c.opts)
 			if err != nil {
-				c.log.Println("[WARN] join err", err)
+				c.Log.Println("[WARN] crond: joinCluster err", err)
 			}
 		}
 	})
 
 	c.initHttpServer()
 	if err := c.httpServer.ListenAndServe(); err != nil {
-		c.log.Println("[INFO] listen http err", err)
+		c.Log.Println("[WARN] crond: listen http err", err)
 	}
 }
 
 func (c *Crond) Exit() {
 	c.waitGroup.Wait()
-	c.log.Println("[INFO] crond Exit")
+	c.raft.Shutdown()
+
+	c.Log.Println("[DEBUG] crond: exit")
 }
 
-func (c *Crond) handleTask(te *taskEvent) {
+func (c *Crond) HandleTaskEvent(e *task.Event) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	switch te.Cmd {
-	case TASK_ADD:
-		heap.Push(c.taskHeap, te.Task)
-	case TASK_DEL:
-		for i, task := range *c.taskHeap {
-			if te.Task.Name == task.Name {
-				heap.Remove(c.taskHeap, i)
+	switch e.Cmd {
+	case task.ADD:
+		e.Task.CronExpression, err = cronexpr.Parse(e.Task.CronLine)
+		if err != nil {
+			return
+		}
+		e.Task.RunTime = e.Task.CronExpression.Next(time.Now())
+
+		heap.Push(c.TaskHeap, e.Task)
+	case task.DEL:
+		for i, t := range *c.TaskHeap {
+			if e.Task.Name == t.Name {
+				heap.Remove(c.TaskHeap, i)
 			}
 		}
 	}
-
-	// todo
+	return
 }
 
 func (c *Crond) scheduleTask() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.taskHeap.Len() < 1 {
+	if c.TaskHeap.Len() < 1 {
 		return
 	}
 
 	now := time.Now()
-	top := c.taskHeap.Top().(*task)
-
-	if top.runTime.Before(now) || top.runTime.Equal(now) {
+	top := c.TaskHeap.Top().(*task.Task)
+	if top.RunTime.Before(now) || top.RunTime.Equal(now) {
 		wet := *top
 		c.waitExecTask <- &wet
 
-		top.runTime = top.cronExpression.Next(now)
-		heap.Fix(c.taskHeap, 0)
+		top.RunTime = top.CronExpression.Next(now)
+		heap.Fix(c.TaskHeap, 0)
 	}
 
 	tick := c.opts.defaultScheduleTaskTick
-	if c.taskHeap.Top().(*task).runTime.Sub(now) < tick {
-		tick = c.taskHeap.Top().(*task).runTime.Sub(now)
+	if c.TaskHeap.Top().(*task.Task).RunTime.Sub(now) < tick {
+		tick = c.TaskHeap.Top().(*task.Task).RunTime.Sub(now)
 	}
 	c.scheduleTaskTick = time.Tick(tick)
 }
 
-func (c *Crond) execTask(task *task) {
-	if (c.raft.State() != raft.Leader) {
+func (c *Crond) execTask(t *task.Task) {
+	if c.raft.State() != raft.Leader {
 		return
 	}
 
-	wst := NewStore(task)
-	wst.startTime = time.Now()
+	ss := store.NewStore(t)
+	ss.NodeId = c.opts.nodeId
+	ss.Ip = c.opts.bind
+	ss.StartTime = time.Now()
 
-	cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", wst.task.Cmd)
-	wst.result, wst.err = cmd.CombinedOutput()
+	cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", ss.Task.Cmd)
+	ss.Result, ss.Err = cmd.CombinedOutput()
 
-	wst.endTime = time.Now()
-	c.waitStoreTask <- wst
+	ss.EndTime = time.Now()
+	c.waitStoreTask <- ss
 }
 
 func (c *Crond) joinCluster(opts *options) error {
@@ -186,4 +193,11 @@ func (c *Crond) joinCluster(opts *options) error {
 	}
 
 	return nil
+}
+
+func (c *Crond) getTasks() *task.Heap {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.TaskHeap
 }
