@@ -10,7 +10,9 @@ Cron-s is a distributed task scheduling in Go.
 
 ## Overview
 ./crond -node-id n0 -http-port 127.0.0.1:7570 -bind=127.0.0.1:8570 -data-dir data/n0 -bootstrap true
+
 ./crond -node-id n1 -http-port 127.0.0.1:7571 -bind=127.0.0.1:8571 -data-dir data/n1 -join 127.0.0.1:7570
+
 ./crond -node-id n2 -http-port 127.0.0.1:7572 -bind=127.0.0.1:8572 -data-dir data/n2 -join 127.0.0.1:7570
 
 ## Installation
