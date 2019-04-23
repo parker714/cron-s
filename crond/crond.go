@@ -32,7 +32,7 @@ func New(opts *options) *Crond {
 		opts:             opts,
 		log:              log.New(os.Stdout, "", log.LstdFlags),
 		taskHeap:         &taskHeap{},
-		scheduleTaskTick: time.Tick(opts.defaultScheduleTime),
+		scheduleTaskTick: time.Tick(opts.defaultScheduleTaskTick),
 		waitExecTask:     make(chan *task, 100),
 		waitStoreTask:    make(chan *store, 100),
 	}
@@ -45,20 +45,14 @@ func (c *Crond) Run() {
 		for {
 			select {
 			case <-c.scheduleTaskTick:
-				//c.scheduleTask()
+				c.log.Println("[INFO] start Schedule Task")
+
+				c.scheduleTask()
 			case task := <-c.waitExecTask:
 				c.log.Println("[INFO] start Exec Task", task.Name)
 
 				c.waitGroup.Wrap(func() {
-					store := NewStore()
-					store.task = task
-					store.startTime = time.Now()
-
-					cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", store.task.Cmd)
-					store.result, store.err = cmd.CombinedOutput()
-
-					store.endTime = time.Now()
-					c.waitStoreTask <- store
+					c.execTask(task)
 				})
 			case store := <-c.waitStoreTask:
 				c.log.Printf("[INFO] start Store Task, Name %s, Result %s", store.task.Name, store.result)
@@ -78,22 +72,35 @@ func (c *Crond) Exit() {
 }
 
 func (c *Crond) scheduleTask() {
-	for {
-		if c.taskHeap.Len() < 1 {
-			return
-		}
-
-		now := time.Now()
-		if (*c.taskHeap)[0].runTime.Before(now) || (*c.taskHeap)[0].runTime.Equal(now) {
-			c.waitExecTask <- (*c.taskHeap)[0]
-			(*c.taskHeap)[0].runTime = (*c.taskHeap)[0].cronExpression.Next(now)
-			heap.Fix(c.taskHeap, 0)
-		}
+	if c.taskHeap.Len() < 1 {
+		return
 	}
 
-	//tick := (*c.taskHeap)[0].runTime.Sub(now)
-	//if tick < 0 {
-	//	tick = c.opts.defaultScheduleTime
-	//}
-	//c.scheduleTaskTick = time.Tick(tick)
+	now := time.Now()
+	top := c.taskHeap.Top().(*task)
+
+	if top.runTime.Before(now) || top.runTime.Equal(now) {
+		wet := *top
+		c.waitExecTask <- &wet
+
+		top.runTime = top.cronExpression.Next(now)
+		heap.Fix(c.taskHeap, 0)
+	}
+
+	tick := c.opts.defaultScheduleTaskTick
+	if c.taskHeap.Top().(*task).runTime.Sub(now) < tick {
+		tick = c.taskHeap.Top().(*task).runTime.Sub(now)
+	}
+	c.scheduleTaskTick = time.Tick(tick)
+}
+
+func (c *Crond) execTask(task *task) {
+	wst := NewStore(task)
+	wst.startTime = time.Now()
+
+	cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", wst.task.Cmd)
+	wst.result, wst.err = cmd.CombinedOutput()
+
+	wst.endTime = time.Now()
+	c.waitStoreTask <- wst
 }

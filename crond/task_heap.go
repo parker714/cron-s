@@ -17,3 +17,7 @@ func (h *taskHeap) Pop() interface{} {
 	*h = old[0 : n-1]
 	return x
 }
+
+func (h *taskHeap) Top() interface{} {
+	return (*h)[0]
+}

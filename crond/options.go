@@ -13,7 +13,7 @@ type options struct {
 	join      string // Address of another agent to join upon starting up.
 	dataDir   string // This flag provides a data directory for the agent to store state.
 
-	defaultScheduleTime time.Duration
+	defaultScheduleTaskTick time.Duration
 }
 
 func NewOptions() *options {
@@ -27,7 +27,7 @@ func NewOptions() *options {
 	flag.StringVar(&opts.dataDir, "data-dir", "", "This flag provides a data directory for the agent to store state.")
 	flag.Parse()
 
-	opts.defaultScheduleTime = 100 * time.Microsecond
+	opts.defaultScheduleTaskTick = 1000 * time.Microsecond
 
 	return opts
 }

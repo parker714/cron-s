@@ -10,6 +10,8 @@ type store struct {
 	err       error
 }
 
-func NewStore() *store {
-	return &store{}
+func NewStore(t *task) *store {
+	return &store{
+		task: t,
+	}
 }
