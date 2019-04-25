@@ -1,7 +1,7 @@
-Cron-s [![Release](https://img.shields.io/github/release/degree757/cron-s.svg)](https://github.com/degree757/cron-s/releases)
+crond [![Release](https://img.shields.io/github/release/degree757/cron-s.svg)](https://github.com/degree757/cron-s/releases)
 =====================
 
-Cron-s is a distributed task scheduling in Go.
+crond is a distributed task scheduling system based on raft, time-heap in go.
 
 | Web | Admin |
 |:-------------:|:-------:|
