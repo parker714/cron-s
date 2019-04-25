@@ -1,4 +1,4 @@
-package crond
+package schedule
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func (c *Crond) newRaft(opts *options) (*raft.Raft, error) {
+func (c *Schedule) newRaft(opts *options) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
 	rc.LocalID = raft.ServerID(opts.nodeId)
 
@@ -40,7 +40,7 @@ func (c *Crond) newRaft(opts *options) (*raft.Raft, error) {
 	}
 
 	fsm := &Fms{
-		ctx: &Context{Crond: c},
+		ctx: &Context{Schedule: c},
 	}
 
 	r, err := raft.NewRaft(rc, fsm, LogStore, stableStore, snaps, transport)
@@ -63,7 +63,7 @@ func (c *Crond) newRaft(opts *options) (*raft.Raft, error) {
 	return r, err
 }
 
-func (c *Crond) joinCluster(opts *options) error {
+func (c *Schedule) joinCluster(opts *options) error {
 	url := fmt.Sprintf("http://%s/api/join?nodeId=%s&peerAddress=%s", opts.join, opts.nodeId, opts.bind)
 
 	resp, err := http.Get(url)

@@ -1,7 +1,7 @@
-package crond
+package schedule
 
 import (
-	"cron-s/tasks"
+	"crond/tasks"
 	"encoding/json"
 	"github.com/hashicorp/raft"
 )
@@ -11,7 +11,7 @@ type FmsSnapshot struct {
 }
 
 func (fs *FmsSnapshot) Persist(sink raft.SnapshotSink) error {
-	fs.ctx.Crond.Log.Println("[DEBUG] fmsSnapshot: Persist")
+	fs.ctx.Schedule.Log.Println("[DEBUG] fmsSnapshot: Persist")
 
 	snapshotBytes, err := json.Marshal(tasks.All())
 	if err != nil {
@@ -28,5 +28,5 @@ func (fs *FmsSnapshot) Persist(sink raft.SnapshotSink) error {
 }
 
 func (fs *FmsSnapshot) Release() {
-	fs.ctx.Crond.Log.Println("[DEBUG] fmsSnapshot: Release")
+	fs.ctx.Schedule.Log.Println("[DEBUG] fmsSnapshot: Release")
 }

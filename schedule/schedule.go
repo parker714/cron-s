@@ -1,8 +1,9 @@
-package crond
+package schedule
 
 import (
-	"cron-s/internal/util"
-	"cron-s/tasks"
+	"crond/internal/util"
+	"crond/store"
+	"crond/tasks"
 	"github.com/hashicorp/raft"
 	"log"
 	"net/http"
@@ -10,7 +11,7 @@ import (
 	"time"
 )
 
-type Crond struct {
+type Schedule struct {
 	waitGroup util.WaitGroupWrapper
 
 	opts *options
@@ -18,24 +19,24 @@ type Crond struct {
 
 	scheduleTaskTick <-chan time.Time
 	waitExecTask     chan *tasks.Task
-	waitStoreTask    chan *tasks.Store
+	waitStoreTask    chan *store.Store
 
 	raft       *raft.Raft
 	httpServer *http.Server
 }
 
-func New(opts *options) *Crond {
-	return &Crond{
+func New(opts *options) *Schedule {
+	return &Schedule{
 		opts:             opts,
 		Log:              log.New(os.Stdout, "", log.LstdFlags),
 		scheduleTaskTick: time.Tick(opts.defaultScheduleTaskTick),
 		waitExecTask:     make(chan *tasks.Task, 100),
-		waitStoreTask:    make(chan *tasks.Store, 100),
+		waitStoreTask:    make(chan *store.Store, 100),
 	}
 }
 
-func (c *Crond) Run() {
-	c.Log.Println("[DEBUG] crond: Run")
+func (c *Schedule) Run() {
+	c.Log.Println("[DEBUG] schedule: Run")
 
 	c.waitGroup.Wrap(func() {
 		for {
@@ -43,14 +44,14 @@ func (c *Crond) Run() {
 			case <-c.scheduleTaskTick:
 				c.scheduleTask()
 			case t := <-c.waitExecTask:
-				c.Log.Println("[DEBUG] crond: exec Task")
+				c.Log.Println("[DEBUG] schedule: exec Task")
 
 				c.waitGroup.Wrap(func() {
 					if c.raft.State() != raft.Leader {
 						return
 					}
 
-					ss := tasks.NewStore(t)
+					ss := store.NewStore(t)
 					ss.NodeId = c.opts.nodeId
 					ss.Ip = c.opts.bind
 					ss.StartTime = time.Now()
@@ -60,7 +61,7 @@ func (c *Crond) Run() {
 					c.waitStoreTask <- ss
 				})
 			case st := <-c.waitStoreTask:
-				c.Log.Printf("[DEBUG] crond: start Store Task, Name %s, Result %s\n", st.Task.Name, st.Result)
+				c.Log.Printf("[DEBUG] schedule: start Store Task, Name %s, Result %s\n", st.Task.Name, st.Result)
 
 				c.waitGroup.Wrap(func() {
 					st.Save()
@@ -71,29 +72,29 @@ func (c *Crond) Run() {
 
 	var err error
 	if c.raft, err = c.newRaft(c.opts); err != nil {
-		c.Log.Println("[WARN] crond: newRaft err", err)
+		c.Log.Println("[WARN] schedule: newRaft err", err)
 	}
 	if c.opts.join != "" {
 		err := c.joinCluster(c.opts)
 		if err != nil {
-			c.Log.Println("[WARN] crond: joinCluster err", err)
+			c.Log.Println("[WARN] schedule: joinCluster err", err)
 		}
 	}
 
 	c.initHttpServer()
 	if err := c.httpServer.ListenAndServe(); err != nil {
-		c.Log.Println("[WARN] crond: listen http err", err)
+		c.Log.Println("[WARN] schedule: listen http err", err)
 	}
 }
 
-func (c *Crond) Exit() {
+func (c *Schedule) Exit() {
 	c.waitGroup.Wait()
 	c.raft.Shutdown()
 
-	c.Log.Println("[DEBUG] crond: exit")
+	c.Log.Println("[DEBUG] schedule: exit")
 }
 
-func (c *Crond) scheduleTask() {
+func (c *Schedule) scheduleTask() {
 	if tasks.Len() < 1 {
 		return
 	}
