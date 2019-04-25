@@ -1,7 +1,7 @@
 package crond
 
 import (
-	"cron-s/task"
+	"cron-s/tasks"
 	"encoding/json"
 	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
@@ -28,7 +28,7 @@ func (c *Crond) initHttpServer() {
 }
 
 func (c *Crond) handleTasks(w http.ResponseWriter, r *http.Request) {
-	c.httpResponse(c.getTasks(), w)
+	c.httpResponse(tasks.All(), w)
 }
 
 func (c *Crond) handleTaskSave(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func (c *Crond) handleTaskSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := &task.Task{}
+	t := &tasks.Task{}
 	err = json.Unmarshal(body, t)
 	if err != nil {
 		c.Log.Println("[WARN] crond: http.handleTaskSave Unmarshal err", err)
@@ -51,11 +51,12 @@ func (c *Crond) handleTaskSave(w http.ResponseWriter, r *http.Request) {
 	}
 	t.RunTime = t.CronExpression.Next(time.Now())
 
-	c.taskEvent <- task.NewEvent(t, task.ADD)
+	tasks.Add(t)
 	c.scheduleTask()
 
 	c.httpResponse("ok", w)
 }
+
 func (c *Crond) handleTaskDel(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -63,14 +64,15 @@ func (c *Crond) handleTaskDel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := &task.Task{}
+	t := &tasks.Task{}
 	err = json.Unmarshal(body, t)
 	if err != nil {
 		c.Log.Println("[WARN] crond: http.handleTaskSave ReadAll err", err)
 		return
 	}
 
-	c.taskEvent <- task.NewEvent(t, task.DEL)
+	tasks.Del(t)
+	c.scheduleTask()
 
 	c.httpResponse("ok", w)
 }

@@ -1,12 +1,11 @@
-package store
+package tasks
 
 import (
-	"cron-s/task"
 	"time"
 )
 
 type Store struct {
-	Task      *task.Task
+	Task      *Task
 	NodeId    string
 	Ip        string
 	StartTime time.Time
@@ -15,8 +14,11 @@ type Store struct {
 	Err       error
 }
 
-func NewStore(t *task.Task) *Store {
+func NewStore(t *Task) *Store {
 	return &Store{
 		Task: t,
 	}
+}
+
+func (s *Store) Save() {
 }

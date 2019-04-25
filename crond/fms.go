@@ -1,8 +1,7 @@
 package crond
 
 import (
-	"container/heap"
-	"cron-s/task"
+	"cron-s/tasks"
 	"encoding/json"
 	"github.com/hashicorp/raft"
 	"io"
@@ -15,15 +14,17 @@ type Fms struct {
 func (f *Fms) Apply(l *raft.Log) interface{} {
 	f.ctx.Crond.Log.Println("[DEBUG] fms: Apply")
 
-	te := &task.Event{}
-	if err := json.Unmarshal(l.Data, te); err != nil {
+	t := tasks.NewTask()
+	if err := json.Unmarshal(l.Data, t); err != nil {
 		f.ctx.Crond.Log.Println("[WARN] fms: Apply Unmarshal err", err)
 		return nil
 	}
 
-	if err := f.ctx.Crond.HandleTaskEvent(te); err != nil {
-		f.ctx.Crond.Log.Println("[WARN] fms: Apply HandleTaskEvent err", err)
-		return nil
+	switch t.Status {
+	case tasks.StatusAdd:
+		tasks.Add(t)
+	case tasks.StatusDel:
+		tasks.Del(t)
 	}
 
 	return nil
@@ -40,10 +41,11 @@ func (f *Fms) Snapshot() (raft.FSMSnapshot, error) {
 func (f *Fms) Restore(serialized io.ReadCloser) error {
 	f.ctx.Crond.Log.Println("[DEBUG] fpm: Restore")
 
-	if err := json.NewDecoder(serialized).Decode(f.ctx.Crond.TaskHeap); err != nil {
+	nh := tasks.NewHeap()
+	if err := json.NewDecoder(serialized).Decode(nh); err != nil {
 		return err
 	}
-	heap.Init(f.ctx.Crond.TaskHeap)
+	tasks.Init(nh)
 
 	return nil
 }

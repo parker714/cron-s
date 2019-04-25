@@ -1,9 +1,11 @@
 package crond
 
 import (
+	"fmt"
 	"github.com/hashicorp/raft"
 	raftBoltdb "github.com/hashicorp/raft-boltdb"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -59,4 +61,22 @@ func (c *Crond) newRaft(opts *options) (*raft.Raft, error) {
 	}
 
 	return r, err
+}
+
+func (c *Crond) joinCluster(opts *options) error {
+	url := fmt.Sprintf("http://%s/api/join?nodeId=%s&peerAddress=%s", opts.join, opts.nodeId, opts.bind)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("addCluster url %s err %s", url, err)
+	}
+
+	return nil
 }
