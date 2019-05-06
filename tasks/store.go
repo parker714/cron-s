@@ -1,12 +1,11 @@
-package store
+package tasks
 
 import (
-	"crond/tasks"
 	"time"
 )
 
 type Store struct {
-	Task      *tasks.Task
+	Task      *Task
 	NodeId    string
 	Ip        string
 	StartTime time.Time
@@ -15,7 +14,7 @@ type Store struct {
 	Err       error
 }
 
-func NewStore(t *tasks.Task) *Store {
+func NewStore(t *Task) *Store {
 	return &Store{
 		Task: t,
 	}

@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"context"
+	ctx "context"
 	"github.com/gorhill/cronexpr"
 	"os/exec"
 	"time"
@@ -27,6 +27,6 @@ func NewTask() *Task {
 }
 
 func (t *Task) Exec() ([]byte, error) {
-	cmd := exec.CommandContext(context.TODO(), "/bin/bash", "-c", t.Cmd)
+	cmd := exec.CommandContext(ctx.TODO(), "/bin/bash", "-c", t.Cmd)
 	return cmd.CombinedOutput()
 }

@@ -1,13 +1,13 @@
 package main
 
 import (
-	"crond/schedule"
+	"cron-s/crond"
 	"github.com/judwhite/go-svc/svc"
 	"syscall"
 )
 
 type program struct {
-	schedule *schedule.Schedule
+	crond *crond.Crond
 }
 
 func main() {
@@ -22,15 +22,15 @@ func (p *program) Init(env svc.Environment) error {
 }
 
 func (p *program) Start() error {
-	opts := schedule.NewOptions()
-	p.schedule = schedule.New(opts)
-	p.schedule.Run()
+	opts := crond.NewOptions()
+	p.crond = crond.New(opts)
+	p.crond.Run()
 	return nil
 }
 
 func (p *program) Stop() error {
-	if p.schedule != nil {
-		p.schedule.Exit()
+	if p.crond != nil {
+		p.crond.Exit()
 	}
 	return nil
 }
