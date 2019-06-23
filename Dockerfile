@@ -1,18 +1,12 @@
-FROM golang:latest AS build
+FROM golang:alpine AS build
+MAINTAINER parker714@foxmail.com
 
-RUN mkdir -p /go/src/github.com/parker714/cron-s
-COPY . /go/src/github.com/parker714/cron-s
+WORKDIR /apps
+ADD . /apps
+RUN cd /apps/cmd && go build -o cron
 
-WORKDIR /go/src/github.com/parker714/cron-s
-
-RUN wget -O /bin/dep https://github.com/golang/dep/releases/download/v0.4.1/dep-linux-amd64 \
- && chmod +x /bin/dep \
- && /bin/dep ensure \
- && ./test.sh CGO_ENABLED=0 make DESTDIR=/opt PREFIX=/cron BLDFLAGS='-ldflags="-s -w"' install
-
-FROM alpine:3.7
-
-EXPOSE 8570 7570
-
-COPY --from=build /opt/cron/bin/ /usr/local/bin/
-CMD ["apps/crond/crond"]
+FROM alpine
+WORKDIR /apps
+COPY --from=build /apps/cmd/cron /
+EXPOSE 7570
+CMD ["/cron"]
