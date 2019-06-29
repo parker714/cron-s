@@ -16,7 +16,7 @@ import (
 func (s *service) initMux() {
 	mux := http.NewServeMux()
 
-	handleStatic := http.FileServer(http.Dir("public"))
+	handleStatic := http.FileServer(http.Dir("web"))
 	mux.Handle("/", http.StripPrefix("/", handleStatic))
 
 	mux.HandleFunc("/api/tasks", s.handleTasks)
