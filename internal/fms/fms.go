@@ -1,8 +1,8 @@
 package fms
 
 import (
-	"cron-s/internal/store"
-	"cron-s/pkg/tasks"
+	"cron-s/internal/data"
+	"cron-s/internal/tasks"
 	"encoding/json"
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
@@ -27,9 +27,9 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 
 	switch t.Status {
 	case tasks.StatusAdd:
-		store.Add(t)
+		data.Add(t)
 	case tasks.StatusDel:
-		store.Del(t)
+		data.Del(t)
 	}
 
 	return nil
@@ -48,7 +48,7 @@ func (f *fms) Restore(serialized io.ReadCloser) error {
 	if err := json.NewDecoder(serialized).Decode(nh); err != nil {
 		return err
 	}
-	store.Init(nh)
+	data.Init(nh)
 
 	return nil
 }

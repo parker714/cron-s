@@ -1,7 +1,7 @@
 package fms
 
 import (
-	"cron-s/internal/store"
+	"cron-s/internal/data"
 	"encoding/json"
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
@@ -13,7 +13,7 @@ type fmsSnapshot struct {
 func (fs *fmsSnapshot) Persist(sink raft.SnapshotSink) error {
 	log.Debug("fmsSnapshot: Persist")
 
-	snapshotBytes, err := json.Marshal(store.All())
+	snapshotBytes, err := json.Marshal(data.All())
 	if err != nil {
 		return sink.Cancel()
 	}
