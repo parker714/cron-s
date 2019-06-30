@@ -1,9 +1,7 @@
 package routers
 
 import (
-	"cron-s/internal/data"
-	"cron-s/internal/tick"
-	"cron-s/internal/tasks"
+	"cron-s/internal/task"
 	"github.com/gin-gonic/gin"
 	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
@@ -12,23 +10,21 @@ import (
 )
 
 type router struct {
-	r  *raft.Raft
-	tt *tick.Tick
+	taskScheduler *task.Scheduler
 }
 
-func New(r *raft.Raft, tt *tick.Tick) *router {
+func New(ts *task.Scheduler) *router {
 	return &router{
-		r:  r,
-		tt: tt,
+		taskScheduler: ts,
 	}
 }
 
 func (r *router) Tasks(c *gin.Context) {
-	c.JSON(200, data.All())
+	c.JSON(200, r.taskScheduler.Data.All())
 }
 
 func (r *router) TaskSave(c *gin.Context) {
-	t := tasks.NewTask()
+	t := task.New()
 	err := c.BindJSON(t)
 	if err != nil {
 		log.Error("schedule: http.handleTaskSave Unmarshal err", err)
@@ -41,22 +37,22 @@ func (r *router) TaskSave(c *gin.Context) {
 	}
 	t.RunTime = t.CronExpression.Next(time.Now())
 
-	data.Add(t)
-	r.tt.Renew()
+	r.taskScheduler.Data.Add(t)
+	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
 }
 
 func (r *router) TaskDel(c *gin.Context) {
-	t := tasks.NewTask()
+	t := task.New()
 	err := c.BindJSON(t)
 	if err != nil {
 		log.Error("schedule: http.handleTaskSave ReadAll err", err)
 		return
 	}
 
-	data.Del(t)
-	r.tt.Renew()
+	r.taskScheduler.Data.Del(t)
+	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
 }
@@ -65,7 +61,7 @@ func (r *router) Join(c *gin.Context) {
 	nodeId := c.GetString("nodeId")
 	peerAddress := c.GetString("peerAddress")
 
-	index := r.r.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(peerAddress), 0, 3*time.Second)
+	index := r.taskScheduler.Raft.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(peerAddress), 0, 3*time.Second)
 	if err := index.Error(); err != nil {
 		log.Error("schedule: http.handleJoin err", err)
 		return

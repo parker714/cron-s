@@ -1,8 +1,8 @@
-package scheduler
+package raft
 
 import (
 	"cron-s/internal/conf"
-	"cron-s/internal/fms"
+	"cron-s/internal/task"
 	"github.com/hashicorp/raft"
 	raftBoltdb "github.com/hashicorp/raft-boltdb"
 	"net"
@@ -11,26 +11,26 @@ import (
 	"time"
 )
 
-func (s *scheduler) newRaft() (*raft.Raft, error) {
+func New(cf *conf.Raft, td *task.Data) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
-	rc.LocalID = raft.ServerID(conf.NodeId)
+	rc.LocalID = raft.ServerID(cf.NodeId)
 
-	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(conf.DataDir, "raft-Log.bolt"))
+	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(cf.DataDir, "raft-Log.bolt"))
 	if err != nil {
 		return nil, err
 	}
 
-	stableStore, err := raftBoltdb.NewBoltStore(filepath.Join(conf.DataDir, "raft-stable.bolt"))
+	stableStore, err := raftBoltdb.NewBoltStore(filepath.Join(cf.DataDir, "raft-stable.bolt"))
 	if err != nil {
 		return nil, err
 	}
 
-	snaps, err := raft.NewFileSnapshotStore(conf.DataDir, 1, os.Stderr)
+	snaps, err := raft.NewFileSnapshotStore(cf.DataDir, 1, os.Stderr)
 	if err != nil {
 		return nil, err
 	}
 
-	address, err := net.ResolveTCPAddr("tcp", conf.Bind)
+	address, err := net.ResolveTCPAddr("tcp", cf.Bind)
 	if err != nil {
 		return nil, err
 	}
@@ -39,13 +39,13 @@ func (s *scheduler) newRaft() (*raft.Raft, error) {
 		return nil, err
 	}
 
-	fsm := fms.New()
+	fsm := newFms(td)
 	r, err := raft.NewRaft(rc, fsm, LogStore, stableStore, snaps, transport)
 	if err != nil {
 		return nil, err
 	}
 
-	if conf.Bootstrap {
+	if cf.Bootstrap {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{
 				{

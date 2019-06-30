@@ -1,4 +1,4 @@
-package tasks
+package task
 
 import (
 	ctx "context"
@@ -22,7 +22,7 @@ type Task struct {
 	Status         int                  `json:"-"`
 }
 
-func NewTask() *Task {
+func New() *Task {
 	return &Task{}
 }
 

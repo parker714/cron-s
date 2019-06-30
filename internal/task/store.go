@@ -1,10 +1,10 @@
-package tasks
+package task
 
 import (
 	"time"
 )
 
-type Storage struct {
+type storage struct {
 	Task      *Task
 	NodeId    string
 	Ip        string
@@ -14,11 +14,11 @@ type Storage struct {
 	Err       error
 }
 
-func NewStorage(t *Task) *Storage {
-	return &Storage{
+func NewStorage(t *Task) *storage {
+	return &storage{
 		Task: t,
 	}
 }
 
-func (s *Storage) Save() {
+func (s *storage) Save() {
 }

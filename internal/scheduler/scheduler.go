@@ -2,9 +2,9 @@ package scheduler
 
 import (
 	"cron-s/internal/conf"
+	raft2 "cron-s/internal/raft"
 	"cron-s/internal/routers"
-	"cron-s/internal/tick"
-	"cron-s/pkg/util"
+	"cron-s/internal/task"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/raft"
@@ -14,28 +14,33 @@ import (
 )
 
 type scheduler struct {
-	waitGroup util.WaitGroupWrapper
+	cf *conf.Config
 
-	raft   *raft.Raft
+	raft *raft.Raft
+
+	taskScheduler *task.Scheduler
+
 	engine *gin.Engine
-
-	ts *tick.Tick
 }
 
-func New() *scheduler {
-	return &scheduler{}
+func New(cf *conf.Config) *scheduler {
+	return &scheduler{
+		cf: cf,
+	}
 }
 
-func (s *scheduler) Init(env svc.Environment) error {
-	var err error
-	if s.raft, err = s.newRaft(); err != nil {
-		log.Error("schedule: newRaft err", err)
+func (s *scheduler) Init(env svc.Environment) (err error) {
+	log.Debug("App scheduler init")
+
+	td := task.NewData()
+	if s.raft, err = raft2.New(s.cf.Raft, td); err != nil {
+		log.Error("App scheduler newRaft err,", err)
 	}
 
-	s.ts = tick.New(s.raft)
+	s.taskScheduler = task.NewScheduler(s.cf, td, s.raft)
 
-	r := routers.New(s.raft, s.ts)
 	s.engine = gin.Default()
+	r := routers.New(s.taskScheduler)
 	s.engine.GET("/api/tasks", r.Tasks)
 	s.engine.GET("/api/task/save", r.TaskSave)
 	s.engine.GET("/api/task/del", r.TaskDel)
@@ -45,36 +50,34 @@ func (s *scheduler) Init(env svc.Environment) error {
 }
 
 func (s *scheduler) Start() error {
-	log.Info("service start...")
+	log.Debug("App scheduler start")
 
-	s.waitGroup.Wrap(func() {
-		s.ts.Run()
-	})
+	s.taskScheduler.Run()
 
-	if conf.Join != "" {
+	if s.cf.Join != "" {
 		err := s.joinCluster()
 		if err != nil {
-			log.Error("schedule: joinCluster err", err)
+			log.Warn("App scheduler joinCluster err,", err)
 		}
 	}
 
-	if err := s.engine.Run(conf.HttpPort); err != nil {
-		log.Error("schedule: listen http err", err)
+	if err := s.engine.Run(s.cf.HttpPort); err != nil {
+		log.Error("App scheduler listen http err,", err)
 	}
 	return nil
 }
 
 func (s *scheduler) Stop() error {
-	log.Info("service stop...")
+	log.Debug("App scheduler stop")
 
-	s.waitGroup.Wait()
 	s.raft.Shutdown()
+	s.taskScheduler.WaitGroup.Wait()
 
 	return nil
 }
 
 func (s *scheduler) joinCluster() error {
-	url := fmt.Sprintf("http://%s/api/join?nodeId=%s&peerAddress=%s", conf.Join, conf.NodeId, conf.Bind)
+	url := fmt.Sprintf("http://%s/api/join?nodeId=%s&peerAddress=%s", s.cf.Join, s.cf.Raft.NodeId, s.cf.Raft.Bind)
 
 	resp, err := http.Get(url)
 	if err != nil {

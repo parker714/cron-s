@@ -1,8 +1,7 @@
-package fms
+package raft
 
 import (
-	"cron-s/internal/data"
-	"cron-s/internal/tasks"
+	"cron-s/internal/task"
 	"encoding/json"
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
@@ -10,26 +9,27 @@ import (
 )
 
 type fms struct {
+	taskData *task.Data
 }
 
-func New() *fms {
-	return &fms{}
+func newFms(td *task.Data) *fms {
+	return &fms{taskData: td}
 }
 
 func (f *fms) Apply(l *raft.Log) interface{} {
 	log.Debug("fms: Apply")
 
-	t := tasks.NewTask()
+	t := task.New()
 	if err := json.Unmarshal(l.Data, t); err != nil {
 		log.Error("fms: Apply Unmarshal err", err)
 		return nil
 	}
 
 	switch t.Status {
-	case tasks.StatusAdd:
-		data.Add(t)
-	case tasks.StatusDel:
-		data.Del(t)
+	case task.StatusAdd:
+		f.taskData.Add(t)
+	case task.StatusDel:
+		f.taskData.Del(t)
 	}
 
 	return nil
@@ -38,17 +38,17 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 func (f *fms) Snapshot() (raft.FSMSnapshot, error) {
 	log.Debug("fms: Snapshot")
 
-	return &fmsSnapshot{}, nil
+	return newFmsSnapshot(f.taskData), nil
 }
 
 func (f *fms) Restore(serialized io.ReadCloser) error {
 	log.Debug("fpm: Restore")
 
-	nh := tasks.NewHeap()
+	nh := task.NewHeap()
 	if err := json.NewDecoder(serialized).Decode(nh); err != nil {
 		return err
 	}
-	data.Init(nh)
+	f.taskData.Init(nh)
 
 	return nil
 }
