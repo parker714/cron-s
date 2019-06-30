@@ -14,32 +14,31 @@ import (
 )
 
 type scheduler struct {
-	cf *conf.Config
+	cf       *conf.Config
+	taskData *task.Data
+	engine   *gin.Engine
 
-	raft *raft.Raft
-
+	raft          *raft.Raft
 	taskScheduler *task.Scheduler
-
-	engine *gin.Engine
 }
 
 func New(cf *conf.Config) *scheduler {
 	return &scheduler{
-		cf: cf,
+		cf:       cf,
+		taskData: task.NewData(),
+		engine:   gin.Default(),
 	}
 }
 
 func (s *scheduler) Init(env svc.Environment) (err error) {
 	log.Debug("App scheduler init")
 
-	td := task.NewData()
-	if s.raft, err = raft2.New(s.cf.Raft, td); err != nil {
+	if s.raft, err = raft2.New(s.cf.Raft, s.taskData); err != nil {
 		log.Error("App scheduler newRaft err,", err)
 	}
 
-	s.taskScheduler = task.NewScheduler(s.cf, td, s.raft)
+	s.taskScheduler = task.NewScheduler(s.cf, s.taskData, s.raft)
 
-	s.engine = gin.Default()
 	r := routers.New(s.taskScheduler)
 	s.engine.GET("/api/tasks", r.Tasks)
 	s.engine.GET("/api/task/save", r.TaskSave)
