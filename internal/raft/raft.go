@@ -1,40 +1,39 @@
 package raft
 
 import (
-	"cron-s/internal/conf"
 	"cron-s/internal/task"
 	"github.com/hashicorp/raft"
 	raftBoltdb "github.com/hashicorp/raft-boltdb"
+	"io"
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 )
 
-func New(cf *conf.Raft, td *task.Data) (*raft.Raft, error) {
+func New(opt *Option, td *task.Data, lg io.Writer) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
-	rc.LocalID = raft.ServerID(cf.NodeId)
+	rc.LocalID = raft.ServerID(opt.NodeId)
 
-	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(cf.DataDir, "raft-Log.bolt"))
+	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(opt.DataDir, "raft_log.bolt"))
 	if err != nil {
 		return nil, err
 	}
 
-	stableStore, err := raftBoltdb.NewBoltStore(filepath.Join(cf.DataDir, "raft-stable.bolt"))
+	stableStore, err := raftBoltdb.NewBoltStore(filepath.Join(opt.DataDir, "raft_stable.bolt"))
 	if err != nil {
 		return nil, err
 	}
 
-	snaps, err := raft.NewFileSnapshotStore(cf.DataDir, 1, os.Stderr)
+	snaps, err := raft.NewFileSnapshotStore(opt.DataDir, 1, lg)
 	if err != nil {
 		return nil, err
 	}
 
-	address, err := net.ResolveTCPAddr("tcp", cf.Bind)
+	address, err := net.ResolveTCPAddr("tcp", opt.Bind)
 	if err != nil {
 		return nil, err
 	}
-	transport, err := raft.NewTCPTransport(address.String(), address, 3, 10*time.Second, os.Stderr)
+	transport, err := raft.NewTCPTransport(address.String(), address, 3, 10*time.Second, lg)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +44,7 @@ func New(cf *conf.Raft, td *task.Data) (*raft.Raft, error) {
 		return nil, err
 	}
 
-	if cf.Bootstrap {
+	if opt.Bootstrap {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{
 				{

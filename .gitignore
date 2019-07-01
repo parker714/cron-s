@@ -1,3 +1,7 @@
 .idea
 
-cmd/data
+cmd/snapshots
+cmd/raft_log.bolt
+cmd/raft_stable.bolt
+
+crond

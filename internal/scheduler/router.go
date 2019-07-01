@@ -1,4 +1,4 @@
-package routers
+package scheduler
 
 import (
 	"cron-s/internal/task"
@@ -13,7 +13,7 @@ type router struct {
 	taskScheduler *task.Scheduler
 }
 
-func New(ts *task.Scheduler) *router {
+func newRouter(ts *task.Scheduler) *router {
 	return &router{
 		taskScheduler: ts,
 	}
@@ -58,12 +58,12 @@ func (r *router) TaskDel(c *gin.Context) {
 }
 
 func (r *router) Join(c *gin.Context) {
-	nodeId := c.GetString("nodeId")
-	peerAddress := c.GetString("peerAddress")
+	nodeId := c.Query("nodeId")
+	peerAddress := c.Query("peerAddress")
 
 	index := r.taskScheduler.Raft.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(peerAddress), 0, 3*time.Second)
 	if err := index.Error(); err != nil {
-		log.Error("schedule: http.handleJoin err", err)
+		log.Error("router Join err, ", err)
 		return
 	}
 

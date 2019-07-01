@@ -7,8 +7,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "cron",
-	Short: "Cron-s cmd",
+	Use:   "crond",
+	Short: "Crond cmd",
 }
 
 func main() {

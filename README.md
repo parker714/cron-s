@@ -9,11 +9,11 @@ crond is a distributed task scheduling system based on raft, time-heap in go.
 
 
 ## Overview
-./crond -node-id n0 -http-port 127.0.0.1:7570 -bind=127.0.0.1:8570 -data-dir data/n0 -bootstrap true
+./crond agent --http-port :7570 --node-id n0 --bind :8570 --data-dir data/n0
 
-./crond -node-id n1 -http-port 127.0.0.1:7571 -bind=127.0.0.1:8571 -data-dir data/n1 -join 127.0.0.1:7570
+./crond agent --http-port :7571 --node-id n1 --bind 127.0.0.1:8571 --data-dir data/n1 --join 127.0.0.1:7570
 
-./crond -node-id n2 -http-port 127.0.0.1:7572 -bind=127.0.0.1:8572 -data-dir data/n2 -join 127.0.0.1:7570
+./crond agent --http-port :7572 --node-id n2 --bind :8572 --data-dir data/n2 --join 127.0.0.1:7570
 
 ## Installation
 

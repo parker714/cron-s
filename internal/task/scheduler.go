@@ -1,7 +1,6 @@
 package task
 
 import (
-	"cron-s/internal/conf"
 	"cron-s/pkg/util"
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
@@ -11,7 +10,7 @@ import (
 type Scheduler struct {
 	WaitGroup util.WaitGroupWrapper
 
-	cf   *conf.Config
+	opt  *Option
 	Data *Data
 	Raft *raft.Raft
 
@@ -20,12 +19,12 @@ type Scheduler struct {
 	waitStorage   chan *storage
 }
 
-func NewScheduler(cf *conf.Config, d *Data, r *raft.Raft) *Scheduler {
+func NewScheduler(opt *Option, d *Data, r *raft.Raft) *Scheduler {
 	return &Scheduler{
-		cf:            cf,
+		opt:           opt,
 		Data:          d,
 		Raft:          r,
-		waitRenewTick: time.Tick(cf.WaitRenewTick),
+		waitRenewTick: time.Tick(opt.TaskRenewTick),
 		waitExec:      make(chan *Task, 100),
 		waitStorage:   make(chan *storage, 100),
 	}
@@ -47,8 +46,8 @@ func (s *Scheduler) Run() {
 					}
 
 					ss := NewStorage(t)
-					ss.NodeId = s.cf.Raft.NodeId
-					ss.Ip = s.cf.Raft.Bind
+					//ss.NodeId = s.cf.Raft.NodeId
+					//ss.Ip = s.cf.Raft.Bind
 					ss.StartTime = time.Now()
 					ss.Result, ss.Err = t.Exec()
 					ss.EndTime = time.Now()
@@ -81,7 +80,7 @@ func (s *Scheduler) Renew() {
 		s.Data.Fix(0)
 	}
 
-	tick := s.cf.WaitRenewTick
+	tick := s.opt.TaskRenewTick
 	if s.Data.Top().RunTime.Sub(now) < tick {
 		tick = s.Data.Top().RunTime.Sub(now)
 	}
