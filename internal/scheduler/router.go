@@ -20,7 +20,7 @@ func newRouter(ts *task.Scheduler) *router {
 }
 
 func (r *router) Tasks(c *gin.Context) {
-	c.JSON(200, r.taskScheduler.Data.All())
+	c.JSON(200, r.taskScheduler.Heap)
 }
 
 func (r *router) TaskSave(c *gin.Context) {
@@ -35,9 +35,9 @@ func (r *router) TaskSave(c *gin.Context) {
 		log.Error("schedule: http.handleTaskSave Parse err", err)
 		return
 	}
-	t.RunTime = t.CronExpression.Next(time.Now())
+	t.PlanExecTime = t.CronExpression.Next(time.Now())
 
-	r.taskScheduler.Data.Add(t)
+	r.taskScheduler.Heap.Push(t)
 	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
@@ -51,17 +51,17 @@ func (r *router) TaskDel(c *gin.Context) {
 		return
 	}
 
-	r.taskScheduler.Data.Del(t)
+	r.taskScheduler.Heap.Remove(t)
 	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
 }
 
 func (r *router) Join(c *gin.Context) {
-	nodeId := c.Query("nodeId")
+	nodeID := c.Query("nodeID")
 	peerAddress := c.Query("peerAddress")
 
-	index := r.taskScheduler.Raft.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(peerAddress), 0, 3*time.Second)
+	index := r.taskScheduler.Raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(peerAddress), 0, 3*time.Second)
 	if err := index.Error(); err != nil {
 		log.Error("router Join err, ", err)
 		return

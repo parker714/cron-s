@@ -5,17 +5,19 @@ import (
 	"cron-s/internal/task"
 )
 
+// Option is app config struct
 type Option struct {
 	LogLevel string
-	HttpPort string
+	HTTPPort string
 	Join     string
 	Task     *task.Option
 	Raft     *raft.Option
 }
 
+// NewOption returns app config instance
 func NewOption() *Option {
 	return &Option{
-		LogLevel: "info",
+		LogLevel: "debug",
 		Task:     task.NewOption(),
 		Raft:     raft.NewOption(),
 	}

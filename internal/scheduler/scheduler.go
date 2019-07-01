@@ -12,19 +12,22 @@ import (
 )
 
 type scheduler struct {
-	opt      *Option
-	taskData *task.Data
+	opt *Option
+
+	taskHeap task.Heap
 	engine   *gin.Engine
 
 	raft          *raft.Raft
 	taskScheduler *task.Scheduler
 }
 
-func New(opt *Option) *scheduler {
+// New returns app schedule instance
+func New(opt *Option) svc.Service {
 	gin.SetMode(gin.ReleaseMode)
+
 	return &scheduler{
 		opt:      opt,
-		taskData: task.NewData(),
+		taskHeap: task.NewHeap(),
 		engine:   gin.Default(),
 	}
 }
@@ -42,11 +45,11 @@ func (s *scheduler) Init(env svc.Environment) (err error) {
 	if s.opt.Join != "" {
 		s.opt.Raft.Bootstrap = false
 	}
-	if s.raft, err = raft2.New(s.opt.Raft, s.taskData, log.StandardLogger().Out); err != nil {
+	if s.raft, err = raft2.New(s.opt.Raft, s.taskHeap, log.StandardLogger().Out); err != nil {
 		log.Error("App scheduler newRaft err,", err)
 	}
 
-	s.taskScheduler = task.NewScheduler(s.opt.Task, s.taskData, s.raft)
+	s.taskScheduler = task.NewScheduler(s.opt.Task, s.taskHeap, s.raft)
 
 	r := newRouter(s.taskScheduler)
 	s.engine.GET("/api/tasks", r.Tasks)
@@ -70,7 +73,7 @@ func (s *scheduler) Start() error {
 		}
 	}
 
-	if err := s.engine.Run(s.opt.HttpPort); err != nil {
+	if err := s.engine.Run(s.opt.HTTPPort); err != nil {
 		log.Error("App scheduler listen http err,", err)
 	}
 	return nil
@@ -86,7 +89,7 @@ func (s *scheduler) Stop() error {
 }
 
 func (s *scheduler) joinCluster() error {
-	url := fmt.Sprintf("http://%s/api/join?nodeId=%s&peerAddress=%s", s.opt.Join, s.opt.Raft.NodeId, s.opt.Raft.Bind)
+	url := fmt.Sprintf("http://%s/api/join?nodeID=%s&peerAddress=%s", s.opt.Join, s.opt.Raft.NodeID, s.opt.Raft.Bind)
 
 	resp, err := http.Get(url)
 	if err != nil {

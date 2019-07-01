@@ -10,9 +10,10 @@ import (
 	"time"
 )
 
-func New(opt *Option, td *task.Data, lg io.Writer) (*raft.Raft, error) {
+// New app raft
+func New(opt *Option, th task.Heap, lg io.Writer) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
-	rc.LocalID = raft.ServerID(opt.NodeId)
+	rc.LocalID = raft.ServerID(opt.NodeID)
 
 	LogStore, err := raftBoltdb.NewBoltStore(filepath.Join(opt.DataDir, "raft_log.bolt"))
 	if err != nil {
@@ -38,7 +39,7 @@ func New(opt *Option, td *task.Data, lg io.Writer) (*raft.Raft, error) {
 		return nil, err
 	}
 
-	fsm := newFms(td)
+	fsm := newFms(th)
 	r, err := raft.NewRaft(rc, fsm, LogStore, stableStore, snaps, transport)
 	if err != nil {
 		return nil, err

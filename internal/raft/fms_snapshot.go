@@ -8,17 +8,17 @@ import (
 )
 
 type fmsSnapshot struct {
-	taskData *task.Data
+	taskHeap task.Heap
 }
 
-func newFmsSnapshot(td *task.Data) *fmsSnapshot {
-	return &fmsSnapshot{taskData: td}
+func newFmsSnapshot(th task.Heap) *fmsSnapshot {
+	return &fmsSnapshot{taskHeap: th}
 }
 
 func (fs *fmsSnapshot) Persist(sink raft.SnapshotSink) error {
 	log.Debug("fmsSnapshot: Persist")
 
-	snapshotBytes, err := json.Marshal(fs.taskData.All())
+	snapshotBytes, err := json.Marshal(fs.taskHeap)
 	if err != nil {
 		return sink.Cancel()
 	}

@@ -1,6 +1,7 @@
 package raft
 
 import (
+	cheap "container/heap"
 	"cron-s/internal/task"
 	"encoding/json"
 	"github.com/hashicorp/raft"
@@ -9,11 +10,11 @@ import (
 )
 
 type fms struct {
-	taskData *task.Data
+	taskHeap task.Heap
 }
 
-func newFms(td *task.Data) *fms {
-	return &fms{taskData: td}
+func newFms(th task.Heap) *fms {
+	return &fms{taskHeap: th}
 }
 
 func (f *fms) Apply(l *raft.Log) interface{} {
@@ -27,9 +28,9 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 
 	switch t.Status {
 	case task.StatusAdd:
-		f.taskData.Add(t)
+		f.taskHeap.Push(t)
 	case task.StatusDel:
-		f.taskData.Del(t)
+		f.taskHeap.Remove(t)
 	}
 
 	return nil
@@ -38,7 +39,7 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 func (f *fms) Snapshot() (raft.FSMSnapshot, error) {
 	log.Debug("fms: Snapshot")
 
-	return newFmsSnapshot(f.taskData), nil
+	return newFmsSnapshot(f.taskHeap), nil
 }
 
 func (f *fms) Restore(serialized io.ReadCloser) error {
@@ -48,7 +49,7 @@ func (f *fms) Restore(serialized io.ReadCloser) error {
 	if err := json.NewDecoder(serialized).Decode(nh); err != nil {
 		return err
 	}
-	f.taskData.Init(nh)
+	cheap.Init(f.taskHeap)
 
 	return nil
 }
