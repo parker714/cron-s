@@ -1,24 +1,24 @@
 package main
 
 import (
-	"cron-s/internal/scheduler"
+	"cron-s/internal/agent"
 	"github.com/judwhite/go-svc/svc"
 	"github.com/spf13/cobra"
 )
 
 type agentCmd struct {
 	cmd *cobra.Command
-	opt *scheduler.Option
+	opt *agent.Option
 }
 
 func newAgentCmd() *cobra.Command {
 	ac := new(agentCmd)
-	ac.opt = scheduler.NewOption()
+	ac.opt = agent.NewOption()
 	ac.cmd = &cobra.Command{
 		Use:   "agent",
 		Short: "Agent service",
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := svc.Run(scheduler.New(ac.opt)); err != nil {
+			if err := svc.Run(agent.New(ac.opt)); err != nil {
 				panic(err)
 			}
 		},

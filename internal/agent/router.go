@@ -1,4 +1,4 @@
-package scheduler
+package agent
 
 import (
 	"cron-s/internal/task"

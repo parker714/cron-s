@@ -1,4 +1,4 @@
-package scheduler
+package agent
 
 import (
 	raft2 "cron-s/internal/raft"
@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-type scheduler struct {
+type service struct {
 	opt *Option
 
 	taskHeap task.Heap
@@ -25,14 +25,14 @@ type scheduler struct {
 func New(opt *Option) svc.Service {
 	gin.SetMode(gin.ReleaseMode)
 
-	return &scheduler{
+	return &service{
 		opt:      opt,
 		taskHeap: task.NewHeap(),
 		engine:   gin.Default(),
 	}
 }
 
-func (s *scheduler) Init(env svc.Environment) (err error) {
+func (s *service) Init(env svc.Environment) (err error) {
 	log.SetFormatter(&log.TextFormatter{
 		FullTimestamp: true,
 	})
@@ -61,7 +61,7 @@ func (s *scheduler) Init(env svc.Environment) (err error) {
 	return nil
 }
 
-func (s *scheduler) Start() error {
+func (s *service) Start() error {
 	log.Debug("App scheduler start")
 
 	s.taskScheduler.Run()
@@ -79,7 +79,7 @@ func (s *scheduler) Start() error {
 	return nil
 }
 
-func (s *scheduler) Stop() error {
+func (s *service) Stop() error {
 	log.Info("App scheduler stop")
 
 	s.raft.Shutdown()
@@ -88,7 +88,7 @@ func (s *scheduler) Stop() error {
 	return nil
 }
 
-func (s *scheduler) joinCluster() error {
+func (s *service) joinCluster() error {
 	url := fmt.Sprintf("http://%s/api/join?nodeID=%s&peerAddress=%s", s.opt.Join, s.opt.Raft.NodeID, s.opt.Raft.Bind)
 
 	resp, err := http.Get(url)
