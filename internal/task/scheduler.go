@@ -16,7 +16,7 @@ type Scheduler struct {
 	Heap Heap
 	Raft *raft.Raft
 
-	renewTick   <-chan time.Time
+	renewTick   *time.Ticker
 	waitExec    chan *Task
 	waitStorage chan *Task
 }
@@ -27,7 +27,7 @@ func NewScheduler(opt *Option, h Heap, r *raft.Raft) *Scheduler {
 		opt:         opt,
 		Heap:        h,
 		Raft:        r,
-		renewTick:   time.Tick(opt.TaskRenewTick),
+		renewTick:   time.NewTicker(opt.TaskRenewTick),
 		waitExec:    make(chan *Task, 100),
 		waitStorage: make(chan *Task, 100),
 	}
@@ -38,7 +38,7 @@ func (s *Scheduler) Run() {
 	s.WaitGroup.Wrap(func() {
 		for {
 			select {
-			case <-s.renewTick:
+			case <-s.renewTick.C:
 				log.Debug("Task scheduler renew")
 				s.Renew()
 			case t := <-s.waitExec:
@@ -96,5 +96,5 @@ func (s *Scheduler) Renew() {
 	if top.PlanExecTime.Sub(now) < tick {
 		tick = top.PlanExecTime.Sub(now)
 	}
-	s.renewTick = time.Tick(tick)
+	s.renewTick = time.NewTicker(tick)
 }
