@@ -4,18 +4,19 @@ import (
 	raft2 "cron-s/internal/raft"
 	"cron-s/internal/task"
 	"fmt"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/raft"
 	"github.com/judwhite/go-svc/svc"
 	log "github.com/sirupsen/logrus"
-	"net/http"
 )
 
 type service struct {
 	opt *Option
 
-	taskHeap task.Heap
-	engine   *gin.Engine
+	tasks  task.Tasks
+	engine *gin.Engine
 
 	raft          *raft.Raft
 	taskScheduler *task.Scheduler
@@ -26,9 +27,9 @@ func New(opt *Option) svc.Service {
 	gin.SetMode(gin.ReleaseMode)
 
 	return &service{
-		opt:      opt,
-		taskHeap: task.NewHeap(),
-		engine:   gin.Default(),
+		opt:    opt,
+		tasks:  task.NewTasks(),
+		engine: gin.Default(),
 	}
 }
 
@@ -45,11 +46,11 @@ func (s *service) Init(env svc.Environment) (err error) {
 	if s.opt.Join != "" {
 		s.opt.Raft.Bootstrap = false
 	}
-	if s.raft, err = raft2.New(s.opt.Raft, s.taskHeap, log.StandardLogger().Out); err != nil {
+	if s.raft, err = raft2.New(s.opt.Raft, s.tasks, log.StandardLogger().Out); err != nil {
 		log.Error("App scheduler newRaft err,", err)
 	}
 
-	s.taskScheduler = task.NewScheduler(s.opt.Task, s.taskHeap, s.raft)
+	s.taskScheduler = task.NewScheduler(s.opt.Task, s.tasks, s.raft)
 
 	r := newRouter(s.taskScheduler)
 	s.engine.GET("/api/tasks", r.Tasks)

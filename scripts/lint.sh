@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
-golint $(go list ../...)
+golint $(go list ./...)
 
-cd ../ && golangci-lint run
+golangci-lint run

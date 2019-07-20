@@ -2,6 +2,7 @@ package main
 
 import (
 	"cron-s/internal/agent"
+
 	"github.com/judwhite/go-svc/svc"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,7 @@ func newAgentCmd() *cobra.Command {
 
 func (ac *agentCmd) addFlags() {
 	ac.cmd.Flags().StringVarP(&ac.opt.HTTPPort, "http-port", "", ":7570", "The HTTP API port to listen on.")
+	ac.cmd.MarkFlagRequired("http-port")
 	ac.cmd.Flags().StringVarP(&ac.opt.Join, "join", "", "", "Address of another agent to join upon starting up.")
 	ac.cmd.Flags().BoolVarP(&ac.opt.Raft.Bootstrap, "bootstrap", "", true, "This flag is used to control if a server is in 'bootstrap' mode.")
 	ac.cmd.Flags().StringVarP(&ac.opt.Raft.NodeID, "node-id", "", "node0", "The unique ID for this server across all time.")

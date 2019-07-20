@@ -1,20 +1,21 @@
 package raft
 
 import (
-	cheap "container/heap"
+	"container/heap"
 	"cron-s/internal/task"
 	"encoding/json"
+	"io"
+
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
-	"io"
 )
 
 type fms struct {
-	taskHeap task.Heap
+	tasks task.Tasks
 }
 
-func newFms(th task.Heap) *fms {
-	return &fms{taskHeap: th}
+func newFms(ts task.Tasks) *fms {
+	return &fms{tasks: ts}
 }
 
 func (f *fms) Apply(l *raft.Log) interface{} {
@@ -28,9 +29,9 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 
 	switch t.Status {
 	case task.StatusAdd:
-		f.taskHeap.Push(t)
+		f.tasks.Push(t)
 	case task.StatusDel:
-		f.taskHeap.Remove(t)
+		f.tasks.Remove(t.Name)
 	}
 
 	return nil
@@ -39,17 +40,17 @@ func (f *fms) Apply(l *raft.Log) interface{} {
 func (f *fms) Snapshot() (raft.FSMSnapshot, error) {
 	log.Debug("fms: Snapshot")
 
-	return newFmsSnapshot(f.taskHeap), nil
+	return newFmsSnapshot(f.tasks), nil
 }
 
 func (f *fms) Restore(serialized io.ReadCloser) error {
 	log.Debug("fpm: Restore")
 
-	nh := task.NewHeap()
-	if err := json.NewDecoder(serialized).Decode(nh); err != nil {
+	nts := task.NewTasks()
+	if err := json.NewDecoder(serialized).Decode(nts); err != nil {
 		return err
 	}
-	cheap.Init(f.taskHeap)
+	heap.Init(f.tasks)
 
 	return nil
 }

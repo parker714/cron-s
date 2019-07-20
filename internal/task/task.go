@@ -2,9 +2,10 @@ package task
 
 import (
 	ctx "context"
-	"github.com/gorhill/cronexpr"
 	"os/exec"
 	"time"
+
+	"github.com/gorhill/cronexpr"
 )
 
 const (
@@ -36,8 +37,8 @@ func New() *Task {
 }
 
 // Exec task
-func (t *Task) Exec() (err error) {
-	cmd := exec.CommandContext(ctx.TODO(), "/bin/bash", "-c", t.Cmd)
+func (t *Task) Exec(ctx ctx.Context) (err error) {
+	cmd := exec.CommandContext(ctx, "/bin/bash", "-c", t.Cmd)
 	t.Result, err = cmd.CombinedOutput()
 	return
 }

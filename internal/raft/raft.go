@@ -2,16 +2,17 @@ package raft
 
 import (
 	"cron-s/internal/task"
-	"github.com/hashicorp/raft"
-	raftBoltdb "github.com/hashicorp/raft-boltdb"
 	"io"
 	"net"
 	"path/filepath"
 	"time"
+
+	"github.com/hashicorp/raft"
+	raftBoltdb "github.com/hashicorp/raft-boltdb"
 )
 
 // New app raft
-func New(opt *Option, th task.Heap, lg io.Writer) (*raft.Raft, error) {
+func New(opt *Option, ts task.Tasks, lg io.Writer) (*raft.Raft, error) {
 	rc := raft.DefaultConfig()
 	rc.LocalID = raft.ServerID(opt.NodeID)
 
@@ -39,7 +40,7 @@ func New(opt *Option, th task.Heap, lg io.Writer) (*raft.Raft, error) {
 		return nil, err
 	}
 
-	fsm := newFms(th)
+	fsm := newFms(ts)
 	r, err := raft.NewRaft(rc, fsm, LogStore, stableStore, snaps, transport)
 	if err != nil {
 		return nil, err

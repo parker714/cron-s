@@ -1,20 +1,22 @@
 package task
 
 import (
-	cheap "container/heap"
+	"container/heap"
+	"context"
 	"cron-s/pkg/util"
+	"time"
+
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 // Scheduler is task scheduler struct
 type Scheduler struct {
 	WaitGroup util.WaitGroupWrapper
 
-	opt  *Option
-	Heap Heap
-	Raft *raft.Raft
+	opt   *Option
+	Tasks Tasks
+	Raft  *raft.Raft
 
 	renewTick   *time.Ticker
 	waitExec    chan *Task
@@ -22,10 +24,10 @@ type Scheduler struct {
 }
 
 // NewScheduler returns scheduler instance
-func NewScheduler(opt *Option, h Heap, r *raft.Raft) *Scheduler {
+func NewScheduler(opt *Option, ts Tasks, r *raft.Raft) *Scheduler {
 	return &Scheduler{
 		opt:         opt,
-		Heap:        h,
+		Tasks:       ts,
 		Raft:        r,
 		renewTick:   time.NewTicker(opt.TaskRenewTick),
 		waitExec:    make(chan *Task, 100),
@@ -50,7 +52,7 @@ func (s *Scheduler) Run() {
 					}
 
 					t.ActualStartTime = time.Now()
-					if err := t.Exec(); err != nil {
+					if err := t.Exec(context.TODO()); err != nil {
 						log.Errorf("exec task %+v ,err %s", t, err)
 						return
 					}
@@ -71,28 +73,22 @@ func (s *Scheduler) Run() {
 
 // Renew is used to renew schedule task
 func (s *Scheduler) Renew() {
-	if s.Heap.Len() < 1 {
+	if s.Tasks.Len() < 1 {
 		return
 	}
 
 	now := time.Now()
-	top, err := s.Heap.Top()
-	if err != nil {
-		return
-	}
+	top := s.Tasks.Top().(*Task)
 	if top.PlanExecTime.Before(now) || top.PlanExecTime.Equal(now) {
 		wet := *top
 		s.waitExec <- &wet
 
 		top.PlanExecTime = top.CronExpression.Next(now)
-		cheap.Fix(s.Heap, 0)
+		heap.Fix(s.Tasks, 0)
 	}
 
 	tick := s.opt.TaskRenewTick
-	top, err = s.Heap.Top()
-	if err != nil {
-		return
-	}
+	top = s.Tasks.Top().(*Task)
 	if top.PlanExecTime.Sub(now) < tick {
 		tick = top.PlanExecTime.Sub(now)
 	}

@@ -1,9 +1,9 @@
-FROM golang:alpine AS build
+FROM golang:1.12 AS build
 MAINTAINER parker714@foxmail.com
 
 WORKDIR /apps
 ADD . /apps
-RUN cd /apps/cmd && go build -o cron
+RUN cd /apps/cmd && go build -mod=vendor -o cron
 
 FROM alpine
 WORKDIR /apps

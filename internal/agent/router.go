@@ -2,11 +2,12 @@ package agent
 
 import (
 	"cron-s/internal/task"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorhill/cronexpr"
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type router struct {
@@ -20,7 +21,7 @@ func newRouter(ts *task.Scheduler) *router {
 }
 
 func (r *router) Tasks(c *gin.Context) {
-	c.JSON(200, r.taskScheduler.Heap)
+	c.JSON(200, r.taskScheduler.Tasks)
 }
 
 func (r *router) TaskSave(c *gin.Context) {
@@ -37,7 +38,7 @@ func (r *router) TaskSave(c *gin.Context) {
 	}
 	t.PlanExecTime = t.CronExpression.Next(time.Now())
 
-	r.taskScheduler.Heap.Push(t)
+	r.taskScheduler.Tasks.Push(t)
 	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
@@ -51,7 +52,7 @@ func (r *router) TaskDel(c *gin.Context) {
 		return
 	}
 
-	r.taskScheduler.Heap.Remove(t)
+	r.taskScheduler.Tasks.Remove(t.Name)
 	r.taskScheduler.Renew()
 
 	c.String(200, "ok")
