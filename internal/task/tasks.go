@@ -2,14 +2,13 @@ package task
 
 import (
 	cheap "container/heap"
-	"github.com/pkg/errors"
 )
 
 // Heap is app cached task data
 type Heap interface {
 	cheap.Interface
-	Top() (*Task, error)
-	Remove(t *Task)
+	Remove(name string)
+	Top() interface{}
 }
 
 type heap []*Task
@@ -28,25 +27,19 @@ func (h *heap) Push(x interface{}) {
 }
 
 func (h *heap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
+	val := (*h)[len(*h)-1]
+	*h = (*h)[:len(*h)-1]
+	return val
 }
 
-func (h *heap) Top() (*Task, error) {
-	if len(*h) < 0 {
-		return nil, errors.New("heap no data")
-	}
-
-	return (*h)[0], nil
-}
-
-func (h *heap) Remove(t *Task) {
+func (h *heap) Remove(name string) {
 	for i, hh := range *h {
 		if t.Name == hh.Name {
 			cheap.Remove(h, i)
 		}
 	}
+}
+
+func (h heap) Top() interface{} {
+	return h[0]
 }
