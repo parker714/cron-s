@@ -1,12 +1,7 @@
-crond [![Release](https://img.shields.io/github/release/degree757/cron-s.svg)](https://github.com/degree757/cron-s/releases)
+Cron-s [![Release](https://img.shields.io/github/release/parker714/cron-s.svg)](https://github.com/parker714/cron-s/releases)
 =====================
 
-crond is a distributed task scheduling system based on raft, time-heap in go.
-
-| Web | Admin |
-|:-------------:|:-------:|
-|![list](docs/list.png)|![add](docs/add.png)|
-
+crond is a distributed task scheduling system based on raft、time-heap in go.
 
 ## Overview
 ./crond agent --http-port :7570 --node-id n2 --bind :8570 --data-dir data/n2
@@ -27,4 +22,4 @@ crond is a distributed task scheduling system based on raft, time-heap in go.
 
 ## License
 
-This project is under the MIT License. See the [LICENSE](https://github.com/degree757/cron-s/blob/master/LICENSE) file for the full license text.
+This project is under the MIT License. See the [LICENSE](https://github.com/parker714/cron-s/blob/master/LICENSE) file for the full license text.

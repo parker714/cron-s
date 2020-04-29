@@ -1,9 +1,9 @@
 package agent
 
 import (
-	raft2 "cron-s/internal/raft"
-	"cron-s/internal/task"
 	"fmt"
+	raft2 "github.com/parker714/cron-s/internal/raft"
+	"github.com/parker714/cron-s/internal/task"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

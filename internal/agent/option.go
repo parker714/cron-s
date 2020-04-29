@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"cron-s/internal/raft"
-	"cron-s/internal/task"
+	"github.com/parker714/cron-s/internal/raft"
+	"github.com/parker714/cron-s/internal/task"
 )
 
 // Option is app config struct

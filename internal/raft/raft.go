@@ -1,7 +1,7 @@
 package raft
 
 import (
-	"cron-s/internal/task"
+	"github.com/parker714/cron-s/internal/task"
 	"io"
 	"net"
 	"path/filepath"

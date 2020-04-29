@@ -1,6 +1,6 @@
-module cron-s
+module github.com/parker714/cron-s
 
-go 1.12
+go 1.13
 
 require (
 	github.com/gin-gonic/gin v1.4.0
@@ -8,7 +8,6 @@ require (
 	github.com/hashicorp/raft v1.1.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20190605210249-ef2e128ed477
 	github.com/judwhite/go-svc v1.1.2
-	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.4
 	github.com/ugorji/go v1.1.5-pre // indirect

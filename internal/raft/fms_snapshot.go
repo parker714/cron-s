@@ -1,8 +1,8 @@
 package raft
 
 import (
-	"cron-s/internal/task"
 	"encoding/json"
+	"github.com/parker714/cron-s/internal/task"
 
 	"github.com/hashicorp/raft"
 	log "github.com/sirupsen/logrus"

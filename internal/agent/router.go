@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"cron-s/internal/task"
+	"github.com/parker714/cron-s/internal/task"
 	"time"
 
 	"github.com/gin-gonic/gin"

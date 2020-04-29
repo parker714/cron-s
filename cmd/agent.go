@@ -1,7 +1,7 @@
 package main
 
 import (
-	"cron-s/internal/agent"
+	"github.com/parker714/cron-s/internal/agent"
 
 	"github.com/judwhite/go-svc/svc"
 	"github.com/spf13/cobra"

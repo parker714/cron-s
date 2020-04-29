@@ -2,8 +2,8 @@ package raft
 
 import (
 	"container/heap"
-	"cron-s/internal/task"
 	"encoding/json"
+	"github.com/parker714/cron-s/internal/task"
 	"io"
 
 	"github.com/hashicorp/raft"
